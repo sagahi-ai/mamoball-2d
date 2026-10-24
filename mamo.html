@@ -1,0 +1,1355 @@
+ <!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mamoball / HaxBall Universal 2D</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@500;700&family=Yanone+Kaffeesatz:wght@400;600;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Yanone Kaffeesatz', sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: #090d16;
+            overflow: hidden;
+        }
+
+        .font-teko {
+            font-family: 'Teko', sans-serif;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .arcade-btn {
+            transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
+            box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
+        }
+        .arcade-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        /* Virtual Controls Styling */
+        .joystick-base {
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50%;
+            position: relative;
+            touch-action: none;
+        }
+
+        .joystick-stick {
+            width: 50px;
+            height: 50px;
+            background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(200,200,200,0.75) 100%);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+
+        /* Mobile Action Buttons */
+        .mobile-action-btn {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 6px 14px rgba(0,0,0,0.4);
+        }
+        .mobile-action-btn:active {
+            transform: scale(0.92);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+
+        /* Portrait Warning Modal Screen */
+        #portrait-warning {
+            display: none;
+        }
+        @media screen and (orientation: portrait) and (max-width: 768px) {
+            #portrait-warning {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col items-center justify-center text-white select-none">
+
+    <!-- PORTRAIT ORIENTATION WARNING FOR MOBILE -->
+    <div id="portrait-warning" class="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+        <div class="w-20 h-20 mb-6 text-yellow-400 animate-pulse flex items-center justify-center rounded-full bg-yellow-400/10 border border-yellow-400/30">
+            <i class="fa-solid fa-rotate-right text-4xl"></i>
+        </div>
+        <h2 class="font-teko text-5xl font-bold text-yellow-400 mb-2">ПОВЕРНИТЕ УСТРОЙСТВО</h2>
+        <p class="text-slate-300 text-lg max-w-xs">
+            Для комфортной игры на смартфоне или планшете переключитесь в альбомный режим (Landscape).
+        </p>
+    </div>
+
+    <!-- CANVAS CONTAINER -->
+    <div id="canvas-container" class="relative w-full h-full flex items-center justify-center overflow-hidden bg-slate-950">
+        <canvas id="gameCanvas" class="block rounded-lg shadow-2xl"></canvas>
+
+        <!-- TOP HUD SCOREBOARD & STAMINA -->
+        <div id="hud" class="absolute top-2 sm:top-3 left-1/2 transform -translate-x-1/2 flex items-center gap-2 sm:gap-4 bg-slate-900/90 border border-slate-700/70 rounded-2xl px-3 sm:px-6 py-1.5 sm:py-2 shadow-2xl z-10">
+            <!-- Red Team -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <div id="hud-red-color" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-red-600 border-2 border-white shadow"></div>
+                <div class="flex flex-col">
+                    <span id="hud-red-name" class="font-bold text-red-400 uppercase tracking-wider text-xs sm:text-base leading-none">КРАСНЫЕ</span>
+                    <!-- Red Stamina Bar -->
+                    <div class="w-12 sm:w-20 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden border border-slate-700">
+                        <div id="stamina-red" class="h-full bg-emerald-400 transition-all duration-75" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <span id="score-red" class="font-teko text-3xl sm:text-5xl font-bold text-red-500 min-w-[24px] text-center ml-1">0</span>
+            </div>
+
+            <!-- Timer & Mode Status -->
+            <div class="flex flex-col items-center px-2 sm:px-4 border-x border-slate-700/80">
+                <span id="game-timer" class="font-teko text-2xl sm:text-4xl font-bold text-yellow-400 tracking-widest leading-none">03:00</span>
+                <span id="match-status-text" class="text-[10px] sm:text-xs text-slate-400 font-sans uppercase -mt-0.5">В ИГРЕ</span>
+            </div>
+
+            <!-- Blue Team -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <span id="score-blue" class="font-teko text-3xl sm:text-5xl font-bold text-blue-500 min-w-[24px] text-center mr-1">0</span>
+                <div class="flex flex-col items-end">
+                    <span id="hud-blue-name" class="font-bold text-blue-400 uppercase tracking-wider text-xs sm:text-base leading-none">СИНИЕ</span>
+                    <!-- Blue Stamina Bar -->
+                    <div class="w-12 sm:w-20 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden border border-slate-700">
+                        <div id="stamina-blue" class="h-full bg-emerald-400 transition-all duration-75" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <div id="hud-blue-color" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-blue-600 border-2 border-white shadow"></div>
+            </div>
+
+            <!-- Control Actions (Fullscreen & Pause) -->
+            <div class="flex items-center gap-1.5 ml-2 border-l border-slate-700/80 pl-2">
+                <button id="btn-fullscreen" class="p-1.5 sm:p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition-colors text-xs sm:text-sm" title="Полноэкранный режим">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+                <button id="btn-pause" class="p-1.5 sm:p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition-colors text-xs sm:text-sm" title="Пауза">
+                    <i class="fa-solid fa-pause"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- GOAL BANNER ANIMATION OVERLAY -->
+        <div id="goal-banner" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-0 transition-all duration-300 z-20 bg-black/45 backdrop-blur-sm">
+            <h1 class="font-teko text-7xl sm:text-9xl font-extrabold text-yellow-400 tracking-wider drop-shadow-[0_10px_15px_rgba(0,0,0,0.9)] animate-bounce">
+                ГООООЛ!
+            </h1>
+            <p id="goal-scorer-text" class="text-xl sm:text-3xl font-bold text-white tracking-widest drop-shadow-md">
+                Красные забивают гол!
+            </p>
+        </div>
+
+        <!-- MOBILE TOUCH CONTROLS OVERLAY -->
+        <div id="touch-controls" class="absolute inset-0 pointer-events-none z-10 flex justify-between items-end p-4 sm:p-8">
+            <!-- Left Joystick Container -->
+            <div id="joystick-zone" class="pointer-events-auto joystick-base">
+                <div id="joystick-stick" class="joystick-stick"></div>
+            </div>
+
+            <!-- Action Buttons Right (Kick & Sprint) -->
+            <div class="pointer-events-auto flex items-end gap-3 sm:gap-4 pb-2">
+                <!-- Sprint Button -->
+                <button id="btn-touch-sprint" class="mobile-action-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-emerald-600 active:bg-emerald-700 text-white font-teko text-xl sm:text-2xl font-bold border-2 border-white/50 flex flex-col items-center justify-center">
+                    <i class="fa-solid fa-bolt text-lg mb-0.5"></i>
+                    <span class="text-xs leading-none">БУСТ</span>
+                </button>
+                <!-- Kick Button -->
+                <button id="btn-touch-kick" class="mobile-action-btn w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-red-600 active:bg-red-700 text-white font-teko text-2xl sm:text-3xl font-bold border-4 border-white/60 flex flex-col items-center justify-center">
+                    <i class="fa-solid fa-futbol text-xl mb-0.5"></i>
+                    <span class="text-xs leading-none">УДАР</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN MENU OVERLAY -->
+    <div id="menu-main" class="absolute inset-0 flex items-center justify-center z-30 glass-panel p-4">
+        <div class="max-w-md w-full bg-slate-900/95 border border-slate-700 rounded-3xl p-6 sm:p-8 text-center shadow-2xl relative">
+            <!-- Header Logo -->
+            <div class="mb-5">
+                <h1 class="font-teko text-6xl sm:text-7xl font-bold bg-gradient-to-r from-red-500 via-yellow-400 to-blue-500 bg-clip-text text-transparent leading-none">
+                    MAMOBALL 2D
+                </h1>
+                <p class="text-slate-400 text-xs sm:text-sm tracking-widest uppercase font-semibold mt-1">Кроссплатформенный Аркадный Футбол</p>
+            </div>
+
+            <!-- Game Mode Buttons -->
+            <div class="space-y-3 mb-5">
+                <button id="btn-mode-ai" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 font-bold text-lg sm:text-xl tracking-wider arcade-btn flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-robot"></i> 1 Игрок (Против ИИ)
+                </button>
+
+                <button id="btn-mode-local" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 font-bold text-lg sm:text-xl tracking-wider arcade-btn flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-users"></i> 2 Игрока (На одном ПК/экране)
+                </button>
+
+                <button id="btn-mode-practice" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 font-bold text-lg sm:text-xl tracking-wider arcade-btn flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-futbol"></i> Тренировка / Free Play
+                </button>
+            </div>
+
+            <!-- Controls Info Toggle & Settings -->
+            <div class="flex gap-2">
+                <button id="btn-open-settings" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs sm:text-sm font-bold flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-gear"></i> Настройки
+                </button>
+                <button id="btn-open-controls-info" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs sm:text-sm font-bold flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-keyboard"></i> Управление
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTROLS INFO MODAL -->
+    <div id="modal-controls" class="absolute inset-0 flex items-center justify-center z-40 glass-panel p-4 hidden">
+        <div class="max-w-md w-full bg-slate-900 border border-slate-700 rounded-3xl p-6 text-left shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h2 class="font-teko text-3xl font-bold text-yellow-400">УПРАВЛЕНИЕ</h2>
+                <button id="btn-close-controls" class="text-slate-400 hover:text-white text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-sm text-slate-300">
+                <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <p class="font-bold text-red-400 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-laptop"></i> ПК / Ноутбук - Игрок 1 (Красный):
+                    </p>
+                    <ul class="list-disc list-inside text-xs space-y-1 text-slate-400">
+                        <li>Движение: <span class="text-white font-semibold">WASD</span></li>
+                        <li>Удар по мячу: <span class="text-white font-semibold">Пробел</span> или <span class="text-white font-semibold">X</span></li>
+                        <li>Ускорение (Sprint): <span class="text-white font-semibold">Shift</span></li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <p class="font-bold text-blue-400 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-gamepad"></i> ПК / Ноутбук - Игрок 2 (Синий):
+                    </p>
+                    <ul class="list-disc list-inside text-xs space-y-1 text-slate-400">
+                        <li>Движение: <span class="text-white font-semibold">Стрелки</span></li>
+                        <li>Удар по мячу: <span class="text-white font-semibold">Enter</span> или <span class="text-white font-semibold">M</span></li>
+                        <li>Ускорение (Sprint): <span class="text-white font-semibold">Right Control / K</span></li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <p class="font-bold text-emerald-400 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-mobile-screen-button"></i> Смартфоны / Планшеты:
+                    </p>
+                    <p class="text-xs text-slate-400">
+                        Слева расположен экранный виртуальный джойстик для перемещения. Справа — сенсорные кнопки "УДАР" и "БУСТ".
+                    </p>
+                </div>
+            </div>
+
+            <button id="btn-ok-controls" class="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-base rounded-xl arcade-btn mt-2">
+                Понятно
+            </button>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="modal-settings" class="absolute inset-0 flex items-center justify-center z-40 glass-panel p-4 hidden">
+        <div class="max-w-lg w-full bg-slate-900 border border-slate-700 rounded-3xl p-6 text-left shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h2 class="font-teko text-3xl font-bold text-yellow-400">НАСТРОЙКИ</h2>
+                <button id="btn-close-settings" class="text-slate-400 hover:text-white text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- AI Difficulty -->
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Уровень ИИ (В игре 1 Игрок)</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button class="btn-ai-diff py-2 rounded-xl border border-slate-700 bg-slate-800 text-xs sm:text-sm font-bold" data-diff="easy">Новичок</button>
+                    <button class="btn-ai-diff py-2 rounded-xl border border-yellow-500 bg-yellow-500/20 text-yellow-400 text-xs sm:text-sm font-bold" data-diff="medium">Любитель</button>
+                    <button class="btn-ai-diff py-2 rounded-xl border border-slate-700 bg-slate-800 text-xs sm:text-sm font-bold" data-diff="hard">Профи</button>
+                </div>
+            </div>
+
+            <!-- Match Duration -->
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Время матча</label>
+                <select id="select-time" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm text-white font-bold focus:outline-none focus:border-yellow-500">
+                    <option value="120">2 Минуты</option>
+                    <option value="180" selected>3 Минуты</option>
+                    <option value="300">5 Минут</option>
+                    <option value="0">Без ограничения времени</option>
+                </select>
+            </div>
+
+            <!-- Stadium Size -->
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Размер арены</label>
+                <select id="select-stadium" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm text-white font-bold focus:outline-none focus:border-yellow-500">
+                    <option value="small">Футзал (Компактная)</option>
+                    <option value="classic" selected>Классический стадион</option>
+                    <option value="big">Большое поле</option>
+                </select>
+            </div>
+
+            <!-- Custom Colors -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-red-400 uppercase mb-1">Форма Красных</label>
+                    <input type="color" id="color-red" value="#dc2626" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-blue-400 uppercase mb-1">Форма Синих</label>
+                    <input type="color" id="color-blue" value="#2563eb" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Audio & Touch Overrides -->
+            <div class="space-y-2 pt-2 border-t border-slate-800">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs sm:text-sm font-bold text-slate-300">Звуковые эффекты</span>
+                    <input type="checkbox" id="check-sound" checked class="w-5 h-5 accent-yellow-500 cursor-pointer">
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs sm:text-sm font-bold text-slate-300">Принудительные Сенсорные кнопки (Экран)</span>
+                    <input type="checkbox" id="check-touch-override" class="w-5 h-5 accent-yellow-500 cursor-pointer">
+                </div>
+            </div>
+
+            <button id="btn-save-settings" class="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-lg rounded-2xl arcade-btn mt-2">
+                Сохранить
+            </button>
+        </div>
+    </div>
+
+    <!-- PAUSE MENU OVERLAY -->
+    <div id="menu-pause" class="absolute inset-0 flex items-center justify-center z-30 glass-panel p-4 hidden">
+        <div class="max-w-sm w-full bg-slate-900 border border-slate-700 rounded-3xl p-6 text-center shadow-2xl space-y-3">
+            <h2 class="font-teko text-5xl font-bold text-yellow-400 mb-2">ПАУЗА</h2>
+
+            <button id="btn-resume" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-lg arcade-btn">
+                Продолжить
+            </button>
+            <button id="btn-restart" class="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-lg border border-slate-700">
+                Перезапустить
+            </button>
+            <button id="btn-exit" class="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-lg arcade-btn">
+                В меню
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME OVER OVERLAY -->
+    <div id="menu-gameover" class="absolute inset-0 flex items-center justify-center z-30 glass-panel p-4 hidden">
+        <div class="max-w-md w-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center shadow-2xl space-y-4">
+            <h2 class="font-teko text-6xl font-bold text-yellow-400 leading-none">МАТЧ ОКОНЧЕН</h2>
+            <div id="winner-announcement" class="text-2xl sm:text-3xl font-extrabold text-white">
+                ПОБЕДИЛА КРАСНАЯ КОМАНДА!
+            </div>
+
+            <div class="flex justify-center items-center gap-6 py-4 bg-slate-800/80 rounded-2xl border border-slate-700">
+                <div class="text-center">
+                    <p class="text-xs text-red-400 font-bold">КРАСНЫЕ</p>
+                    <p id="final-score-red" class="font-teko text-6xl font-bold text-red-500">3</p>
+                </div>
+                <span class="font-teko text-4xl text-slate-500">:</span>
+                <div class="text-center">
+                    <p class="text-xs text-blue-400 font-bold">СИНИЕ</p>
+                    <p id="final-score-blue" class="font-teko text-6xl font-bold text-blue-500">1</p>
+                </div>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+                <button id="btn-rematch" class="flex-1 py-3.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-lg rounded-2xl arcade-btn">
+                    Реванш
+                </button>
+                <button id="btn-gameover-menu" class="py-3.5 px-6 bg-slate-800 hover:bg-slate-700 text-white font-bold text-lg rounded-2xl border border-slate-700">
+                    Меню
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GAME SCRIPT -->
+    <script>
+        /**
+         * MAMOBALL 2D UNIVERSAL ENGINE (PC & Mobile Native)
+         */
+
+        // --- DEVICE DETECTION ---
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+        // --- AUDIO SYNTHESIZER ---
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            playKick() {
+                if (!this.enabled || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(170, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.09);
+                gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.09);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.09);
+            }
+            playPostHit() {
+                if (!this.enabled || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(460, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(110, this.ctx.currentTime + 0.16);
+                gain.gain.setValueAtTime(0.75, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.16);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.16);
+            }
+            playWhistle() {
+                if (!this.enabled || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1900, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(2300, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.38);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.38);
+            }
+            playGoalCheer() {
+                if (!this.enabled || !this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 1.6;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 1100;
+                filter.Q.value = 1.0;
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.01, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.65, this.ctx.currentTime + 0.2);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 1.6);
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        // --- CONFIG & CONSTANTS ---
+        const CONFIG = {
+            stadiums: {
+                small: { width: 920, height: 520, goalSize: 140 },
+                classic: { width: 1150, height: 620, goalSize: 170 },
+                big: { width: 1350, height: 740, goalSize: 200 }
+            },
+            playerRadius: 20,
+            ballRadius: 10.5,
+            playerMass: 2.2,
+            ballMass: 0.75,
+            friction: 0.981,
+            ballFriction: 0.987,
+            baseSpeed: 0.58,
+            sprintSpeedMultiplier: 1.45,
+            kickPower: 12.0,
+            postRadius: 8.5,
+            maxStamina: 100,
+            staminaDepletionRate: 0.9,
+            staminaRecoveryRate: 0.35
+        };
+
+        // --- STATE MANAGEMENT ---
+        const state = {
+            mode: 'ai', // 'ai', 'local', 'practice'
+            aiDifficulty: 'medium', // 'easy', 'medium', 'hard'
+            stadiumSize: 'classic',
+            matchDuration: 180,
+            timeRemaining: 180,
+            scoreRed: 0,
+            scoreBlue: 0,
+            active: false,
+            paused: false,
+            goalPause: false,
+            colors: {
+                red: '#dc2626',
+                blue: '#2563eb'
+            },
+            forceTouchControls: false
+        };
+
+        // --- INPUT STATE ---
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            sound.init();
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // Touch Joystick State
+        const joystick = { x: 0, y: 0, active: false };
+        const touchState = { kick: false, sprint: false };
+
+        // --- VECTOR UTILITIES ---
+        class Vector {
+            constructor(x = 0, y = 0) {
+                this.x = x;
+                this.y = y;
+            }
+            add(v) { this.x += v.x; this.y += v.y; return this; }
+            sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+            mult(n) { this.x *= n; this.y *= n; return this; }
+            mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+            normalize() {
+                const m = this.mag();
+                if (m !== 0) this.mult(1 / m);
+                return this;
+            }
+            clone() { return new Vector(this.x, this.y); }
+        }
+
+        // --- DISC / PLAYER CLASS ---
+        class Disc {
+            constructor(x, y, radius, mass, color, number = '') {
+                this.pos = new Vector(x, y);
+                this.vel = new Vector(0, 0);
+                this.radius = radius;
+                this.mass = mass;
+                this.color = color;
+                this.number = number;
+                this.isKicking = false;
+                this.isSprinting = false;
+                this.stamina = CONFIG.maxStamina;
+                this.kickRing = 0;
+            }
+
+            update(friction) {
+                this.pos.add(this.vel);
+                this.vel.mult(friction);
+
+                // Regenerate or Deplete Stamina
+                if (this.isSprinting && this.vel.mag() > 0.1 && this.stamina > 0) {
+                    this.stamina = Math.max(0, this.stamina - CONFIG.staminaDepletionRate);
+                } else {
+                    this.stamina = Math.min(CONFIG.maxStamina, this.stamina + CONFIG.staminaRecoveryRate);
+                }
+
+                if (this.kickRing > 0) {
+                    this.kickRing -= 0.08;
+                }
+            }
+
+            draw(ctx) {
+                // Kick Radius Ripple Ring
+                if (this.kickRing > 0) {
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, this.radius + (1 - this.kickRing) * 14, 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${this.kickRing})`;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
+                // Disc Shadow
+                ctx.beginPath();
+                ctx.arc(this.pos.x + 3, this.pos.y + 4, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.fill();
+
+                // Disc Base Fill
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Outer Border
+                ctx.lineWidth = 3.5;
+                ctx.strokeStyle = this.isKicking ? '#ffffff' : (this.isSprinting ? '#f59e0b' : 'rgba(0,0,0,0.5)');
+                ctx.stroke();
+
+                // Inner Ring
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.radius * 0.68, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Text / Icon
+                if (this.number) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.number, this.pos.x, this.pos.y + 1);
+                }
+            }
+        }
+
+        // --- BALL CLASS ---
+        class Ball extends Disc {
+            constructor(x, y) {
+                super(x, y, CONFIG.ballRadius, CONFIG.ballMass, '#ffffff');
+            }
+
+            draw(ctx) {
+                // Ball Shadow
+                ctx.beginPath();
+                ctx.arc(this.pos.x + 2, this.pos.y + 3, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.fill();
+
+                // Main Ball White Circle
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                // Outline
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#0f172a';
+                ctx.stroke();
+
+                // Soccer Center Pentagon Motif
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.radius * 0.42, 0, Math.PI * 2);
+                ctx.fillStyle = '#0f172a';
+                ctx.fill();
+            }
+        }
+
+        // --- ENGINE SETUP ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let pitch = { x: 0, y: 0, width: 0, height: 0, goalSize: 0 };
+        let ball;
+        let redPlayer;
+        let bluePlayer;
+        let posts = [];
+        let timerInterval = null;
+
+        function initPitch() {
+            const sizeCfg = CONFIG.stadiums[state.stadiumSize];
+            canvas.width = sizeCfg.width + 160;
+            canvas.height = sizeCfg.height + 120;
+
+            pitch = {
+                x: 80,
+                y: 60,
+                width: sizeCfg.width,
+                height: sizeCfg.height,
+                goalSize: sizeCfg.goalSize,
+                goalDepth: 55
+            };
+
+            const goalTopY = pitch.y + (pitch.height - pitch.goalSize) / 2;
+            const goalBottomY = goalTopY + pitch.goalSize;
+
+            posts = [
+                { pos: new Vector(pitch.x, goalTopY), radius: CONFIG.postRadius },
+                { pos: new Vector(pitch.x, goalBottomY), radius: CONFIG.postRadius },
+                { pos: new Vector(pitch.x + pitch.width, goalTopY), radius: CONFIG.postRadius },
+                { pos: new Vector(pitch.x + pitch.width, goalBottomY), radius: CONFIG.postRadius }
+            ];
+
+            resetPositions();
+        }
+
+        function resetPositions() {
+            const centerY = pitch.y + pitch.height / 2;
+            ball = new Ball(pitch.x + pitch.width / 2, centerY);
+            redPlayer = new Disc(pitch.x + pitch.width * 0.25, centerY, CONFIG.playerRadius, CONFIG.playerMass, state.colors.red, '1');
+            bluePlayer = new Disc(pitch.x + pitch.width * 0.75, centerY, CONFIG.playerRadius, CONFIG.playerMass, state.colors.blue, '2');
+        }
+
+        // --- COLLISIONS & PHYSICS ---
+        function resolveCircleCollision(a, b) {
+            const delta = a.pos.clone().sub(b.pos);
+            const dist = delta.mag();
+            const minDist = a.radius + b.radius;
+
+            if (dist < minDist) {
+                const overlap = minDist - dist;
+                const normal = delta.clone().normalize();
+
+                const totalMass = a.mass + b.mass;
+                a.pos.add(normal.clone().mult(overlap * (b.mass / totalMass)));
+                b.pos.sub(normal.clone().mult(overlap * (a.mass / totalMass)));
+
+                const relativeVel = a.vel.clone().sub(b.vel);
+                const velAlongNormal = relativeVel.x * normal.x + relativeVel.y * normal.y;
+
+                if (velAlongNormal < 0) {
+                    const restitution = 0.86;
+                    const impulse = -(1 + restitution) * velAlongNormal / (1 / a.mass + 1 / b.mass);
+                    const impulseVec = normal.clone().mult(impulse);
+
+                    a.vel.add(impulseVec.clone().mult(1 / a.mass));
+                    b.vel.sub(impulseVec.clone().mult(1 / b.mass));
+                }
+            }
+        }
+
+        function handlePostCollisions(disc) {
+            posts.forEach(post => {
+                const delta = disc.pos.clone().sub(post.pos);
+                const dist = delta.mag();
+                const minDist = disc.radius + post.radius;
+
+                if (dist < minDist) {
+                    const overlap = minDist - dist;
+                    const normal = delta.normalize();
+                    disc.pos.add(normal.clone().mult(overlap));
+
+                    const dot = disc.vel.x * normal.x + disc.vel.y * normal.y;
+                    if (dot < 0) {
+                        disc.vel.sub(normal.mult(2 * dot)).mult(0.8);
+                        if (disc === ball) sound.playPostHit();
+                    }
+                }
+            });
+        }
+
+        function handlePitchBoundaries(disc) {
+            const goalTopY = pitch.y + (pitch.height - pitch.goalSize) / 2;
+            const goalBottomY = goalTopY + pitch.goalSize;
+
+            const inGoalY = disc.pos.y > goalTopY && disc.pos.y < goalBottomY;
+
+            // Left Wall
+            if (disc.pos.x - disc.radius < pitch.x) {
+                if (!inGoalY) {
+                    disc.pos.x = pitch.x + disc.radius;
+                    disc.vel.x *= -0.7;
+                } else if (disc.pos.x - disc.radius < pitch.x - pitch.goalDepth) {
+                    disc.pos.x = pitch.x - pitch.goalDepth + disc.radius;
+                    disc.vel.x *= -0.4;
+                }
+            }
+
+            // Right Wall
+            if (disc.pos.x + disc.radius > pitch.x + pitch.width) {
+                if (!inGoalY) {
+                    disc.pos.x = pitch.x + pitch.width - disc.radius;
+                    disc.vel.x *= -0.7;
+                } else if (disc.pos.x + disc.radius > pitch.x + pitch.width + pitch.goalDepth) {
+                    disc.pos.x = pitch.x + pitch.width + pitch.goalDepth - disc.radius;
+                    disc.vel.x *= -0.4;
+                }
+            }
+
+            // Top / Bottom netting boundaries
+            if (disc.pos.x < pitch.x || disc.pos.x > pitch.x + pitch.width) {
+                if (disc.pos.y - disc.radius < goalTopY && disc.pos.y > goalTopY - 12) {
+                    disc.pos.y = goalTopY + disc.radius;
+                    disc.vel.y *= -0.5;
+                }
+                if (disc.pos.y + disc.radius > goalBottomY && disc.pos.y < goalBottomY + 12) {
+                    disc.pos.y = goalBottomY - disc.radius;
+                    disc.vel.y *= -0.5;
+                }
+            }
+
+            // Top Boundary
+            if (disc.pos.y - disc.radius < pitch.y) {
+                disc.pos.y = pitch.y + disc.radius;
+                disc.vel.y *= -0.7;
+            }
+
+            // Bottom Boundary
+            if (disc.pos.y + disc.radius > pitch.y + pitch.height) {
+                disc.pos.y = pitch.y + pitch.height - disc.radius;
+                disc.vel.y *= -0.7;
+            }
+        }
+
+        // --- KICK ACTION ---
+        function executeKick(player) {
+            player.isKicking = true;
+            const dist = player.pos.clone().sub(ball.pos).mag();
+            const kickRange = player.radius + ball.radius + 14;
+
+            if (dist <= kickRange) {
+                const dir = ball.pos.clone().sub(player.pos).normalize();
+                ball.vel = dir.mult(CONFIG.kickPower);
+                player.kickRing = 1.0;
+                sound.playKick();
+            }
+        }
+
+        // --- AI BOT LOGIC ---
+        function updateAI() {
+            if (state.mode !== 'ai' || state.goalPause) return;
+
+            let speedFactor = 0.8;
+            if (state.aiDifficulty === 'easy') speedFactor = 0.6;
+            if (state.aiDifficulty === 'medium') speedFactor = 0.82;
+            if (state.aiDifficulty === 'hard') speedFactor = 1.0;
+
+            const ballInAIHalf = ball.pos.x > pitch.x + pitch.width * 0.45;
+            let target;
+
+            if (ballInAIHalf) {
+                // Position slightly behind ball to shoot towards left goal
+                target = ball.pos.clone().add(new Vector(-14, 0));
+                if (state.aiDifficulty === 'hard' && bluePlayer.stamina > 30) {
+                    bluePlayer.isSprinting = true;
+                }
+            } else {
+                // Defense positioning
+                target = new Vector(pitch.x + pitch.width * 0.78, ball.pos.y);
+                bluePlayer.isSprinting = false;
+            }
+
+            const moveDir = target.sub(bluePlayer.pos);
+            if (moveDir.mag() > 4) {
+                const speed = CONFIG.baseSpeed * (bluePlayer.isSprinting ? CONFIG.sprintSpeedMultiplier : 1.0) * speedFactor;
+                bluePlayer.vel.add(moveDir.normalize().mult(speed));
+            }
+
+            // AI Shoot Range
+            const distToBall = bluePlayer.pos.clone().sub(ball.pos).mag();
+            if (distToBall < CONFIG.playerRadius + CONFIG.ballRadius + 12) {
+                executeKick(bluePlayer);
+            }
+        }
+
+        // --- CONTROLS INPUT PROCESSING ---
+        function processInputs() {
+            if (!state.active || state.paused || state.goalPause) return;
+
+            // --- PLAYER 1 (RED) ---
+            const move1 = new Vector(0, 0);
+
+            // PC WASD
+            if (keys['KeyW']) move1.y -= 1;
+            if (keys['KeyS']) move1.y += 1;
+            if (keys['KeyA']) move1.x -= 1;
+            if (keys['KeyD']) move1.x += 1;
+
+            // Touch Joystick Input Override
+            if (joystick.active) {
+                move1.x = joystick.x;
+                move1.y = joystick.y;
+            }
+
+            // Sprint Check
+            redPlayer.isSprinting = (keys['ShiftLeft'] || keys['ShiftRight'] || touchState.sprint) && redPlayer.stamina > 5;
+
+            if (move1.mag() > 0) {
+                const speed = CONFIG.baseSpeed * (redPlayer.isSprinting ? CONFIG.sprintSpeedMultiplier : 1.0);
+                move1.normalize().mult(speed);
+                redPlayer.vel.add(move1);
+            }
+
+            // Kick Check
+            if (keys['Space'] || keys['KeyX'] || touchState.kick) {
+                executeKick(redPlayer);
+            } else {
+                redPlayer.isKicking = false;
+            }
+
+            // --- PLAYER 2 (BLUE) - LOCAL MULTIPLAYER ---
+            if (state.mode === 'local') {
+                const move2 = new Vector(0, 0);
+                if (keys['ArrowUp']) move2.y -= 1;
+                if (keys['ArrowDown']) move2.y += 1;
+                if (keys['ArrowLeft']) move2.x -= 1;
+                if (keys['ArrowRight']) move2.x += 1;
+
+                bluePlayer.isSprinting = (keys['ControlRight'] || keys['KeyK']) && bluePlayer.stamina > 5;
+
+                if (move2.mag() > 0) {
+                    const speed = CONFIG.baseSpeed * (bluePlayer.isSprinting ? CONFIG.sprintSpeedMultiplier : 1.0);
+                    move2.normalize().mult(speed);
+                    bluePlayer.vel.add(move2);
+                }
+
+                if (keys['Enter'] || keys['KeyM']) {
+                    executeKick(bluePlayer);
+                } else {
+                    bluePlayer.isKicking = false;
+                }
+            }
+        }
+
+        // --- GOAL DETECTION ---
+        function checkGoals() {
+            if (state.goalPause) return;
+
+            const goalTopY = pitch.y + (pitch.height - pitch.goalSize) / 2;
+            const goalBottomY = goalTopY + pitch.goalSize;
+
+            // Red Scores (Right Goal)
+            if (ball.pos.x - ball.radius > pitch.x + pitch.width && ball.pos.y > goalTopY && ball.pos.y < goalBottomY) {
+                scoreGoal('red');
+            }
+
+            // Blue Scores (Left Goal)
+            if (ball.pos.x + ball.radius < pitch.x && ball.pos.y > goalTopY && ball.pos.y < goalBottomY) {
+                scoreGoal('blue');
+            }
+        }
+
+        function scoreGoal(team) {
+            state.goalPause = true;
+            sound.playGoalCheer();
+            sound.playWhistle();
+
+            if (team === 'red') {
+                state.scoreRed++;
+                document.getElementById('score-red').innerText = state.scoreRed;
+                document.getElementById('goal-scorer-text').innerText = 'Красная команда забивает гол!';
+            } else {
+                state.scoreBlue++;
+                document.getElementById('score-blue').innerText = state.scoreBlue;
+                document.getElementById('goal-scorer-text').innerText = 'Синяя команда забивает гол!';
+            }
+
+            const banner = document.getElementById('goal-banner');
+            banner.classList.remove('opacity-0');
+
+            setTimeout(() => {
+                banner.classList.add('opacity-0');
+                resetPositions();
+                state.goalPause = false;
+            }, 2200);
+        }
+
+        // --- RENDER STADIUM & GRAPHICS ---
+        function renderPitch() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Turf Striped Pattern
+            const stripeWidth = pitch.width / 12;
+            for (let i = 0; i < 12; i++) {
+                ctx.fillStyle = (i % 2 === 0) ? '#15803d' : '#166534';
+                ctx.fillRect(pitch.x + i * stripeWidth, pitch.y, stripeWidth, pitch.height);
+            }
+
+            // Pitch Outer Lines
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(pitch.x, pitch.y, pitch.width, pitch.height);
+
+            // Halfway Line
+            ctx.beginPath();
+            ctx.moveTo(pitch.x + pitch.width / 2, pitch.y);
+            ctx.lineTo(pitch.x + pitch.width / 2, pitch.y + pitch.height);
+            ctx.stroke();
+
+            // Center Circle
+            ctx.beginPath();
+            ctx.arc(pitch.x + pitch.width / 2, pitch.y + pitch.height / 2, 75, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Center Spot
+            ctx.beginPath();
+            ctx.arc(pitch.x + pitch.width / 2, pitch.y + pitch.height / 2, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            // Penalty Boxes
+            const penaltyHeight = pitch.goalSize + 90;
+            const penaltyWidth = 140;
+
+            ctx.strokeRect(pitch.x, pitch.y + (pitch.height - penaltyHeight) / 2, penaltyWidth, penaltyHeight);
+            ctx.strokeRect(pitch.x + pitch.width - penaltyWidth, pitch.y + (pitch.height - penaltyHeight) / 2, penaltyWidth, penaltyHeight);
+
+            // Nets
+            const goalTopY = pitch.y + (pitch.height - pitch.goalSize) / 2;
+            const goalBottomY = goalTopY + pitch.goalSize;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillRect(pitch.x - pitch.goalDepth, goalTopY, pitch.goalDepth, pitch.goalSize);
+            ctx.strokeRect(pitch.x - pitch.goalDepth, goalTopY, pitch.goalDepth, pitch.goalSize);
+
+            ctx.fillRect(pitch.x + pitch.width, goalTopY, pitch.goalDepth, pitch.goalSize);
+            ctx.strokeRect(pitch.x + pitch.width, goalTopY, pitch.goalDepth, pitch.goalSize);
+
+            // Goal Netting Horizontal Mesh
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+            ctx.lineWidth = 1;
+            for (let y = goalTopY; y <= goalBottomY; y += 12) {
+                ctx.beginPath();
+                ctx.moveTo(pitch.x - pitch.goalDepth, y);
+                ctx.lineTo(pitch.x, y);
+                ctx.moveTo(pitch.x + pitch.width, y);
+                ctx.lineTo(pitch.x + pitch.width + pitch.goalDepth, y);
+                ctx.stroke();
+            }
+
+            // Posts
+            posts.forEach(post => {
+                ctx.beginPath();
+                ctx.arc(post.pos.x, post.pos.y, post.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#f8fafc';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#0f172a';
+                ctx.stroke();
+            });
+        }
+
+        function updateHUDStamina() {
+            document.getElementById('stamina-red').style.width = `${redPlayer.stamina}%`;
+            document.getElementById('stamina-blue').style.width = `${bluePlayer.stamina}%`;
+        }
+
+        // --- MAIN LOOP ---
+        function gameLoop() {
+            if (state.active && !state.paused) {
+                processInputs();
+                updateAI();
+
+                redPlayer.update(CONFIG.friction);
+                bluePlayer.update(CONFIG.friction);
+                ball.update(CONFIG.ballFriction);
+
+                resolveCircleCollision(redPlayer, bluePlayer);
+                resolveCircleCollision(redPlayer, ball);
+                resolveCircleCollision(bluePlayer, ball);
+
+                [redPlayer, bluePlayer, ball].forEach(entity => {
+                    handlePostCollisions(entity);
+                    handlePitchBoundaries(entity);
+                });
+
+                checkGoals();
+                updateHUDStamina();
+            }
+
+            renderPitch();
+            redPlayer.draw(ctx);
+            bluePlayer.draw(ctx);
+            ball.draw(ctx);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- TIMER & MATCH MANAGEMENT ---
+        function startTimer() {
+            clearInterval(timerInterval);
+            state.timeRemaining = state.matchDuration;
+            updateTimerDisplay();
+
+            if (state.matchDuration === 0) return;
+
+            timerInterval = setInterval(() => {
+                if (state.active && !state.paused && !state.goalPause) {
+                    state.timeRemaining--;
+                    updateTimerDisplay();
+
+                    if (state.timeRemaining <= 0) {
+                        endGame();
+                    }
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            if (state.matchDuration === 0) {
+                document.getElementById('game-timer').innerText = '∞';
+                return;
+            }
+            const mins = Math.floor(state.timeRemaining / 60);
+            const secs = state.timeRemaining % 60;
+            document.getElementById('game-timer').innerText =
+                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function endGame() {
+            state.active = false;
+            clearInterval(timerInterval);
+            sound.playWhistle();
+
+            document.getElementById('final-score-red').innerText = state.scoreRed;
+            document.getElementById('final-score-blue').innerText = state.scoreBlue;
+
+            const winnerText = document.getElementById('winner-announcement');
+            if (state.scoreRed > state.scoreBlue) {
+                winnerText.innerText = 'ПОБЕДИЛА КРАСНАЯ КОМАНДА!';
+                winnerText.className = 'text-2xl sm:text-3xl font-extrabold text-red-500';
+            } else if (state.scoreBlue > state.scoreRed) {
+                winnerText.innerText = 'ПОБЕДИЛА СИНЯЯ КОМАНДА!';
+                winnerText.className = 'text-2xl sm:text-3xl font-extrabold text-blue-500';
+            } else {
+                winnerText.innerText = 'НИЧЬЯ!';
+                winnerText.className = 'text-2xl sm:text-3xl font-extrabold text-yellow-400';
+            }
+
+            document.getElementById('menu-gameover').classList.remove('hidden');
+        }
+
+        function startMatch(mode) {
+            sound.init();
+            sound.playWhistle();
+
+            state.mode = mode;
+            state.scoreRed = 0;
+            state.scoreBlue = 0;
+            state.active = true;
+            state.paused = false;
+            state.goalPause = false;
+
+            document.getElementById('score-red').innerText = '0';
+            document.getElementById('score-blue').innerText = '0';
+            document.getElementById('hud-blue-name').innerText = (mode === 'practice') ? 'БОТ / МЯЧ' : 'СИНИЕ';
+
+            document.getElementById('menu-main').classList.add('hidden');
+            document.getElementById('menu-pause').classList.add('hidden');
+            document.getElementById('menu-gameover').classList.add('hidden');
+
+            initPitch();
+            startTimer();
+            updateTouchVisibility();
+        }
+
+        // --- TOUCH & JOYSTICK SETUP ---
+        function setupTouchEvents() {
+            const joystickZone = document.getElementById('joystick-zone');
+            const joystickStick = document.getElementById('joystick-stick');
+            let touchId = null;
+            let startX = 0, startY = 0;
+
+            joystickZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                sound.init();
+                const touch = e.targetTouches[0];
+                touchId = touch.identifier;
+                const rect = joystickZone.getBoundingClientRect();
+                startX = rect.left + rect.width / 2;
+                startY = rect.top + rect.height / 2;
+                joystick.active = true;
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!joystick.active) return;
+                for (let touch of e.changedTouches) {
+                    if (touch.identifier === touchId) {
+                        const dx = touch.clientX - startX;
+                        const dy = touch.clientY - startY;
+                        const maxDist = 42;
+                        const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxDist);
+                        const angle = Math.atan2(dy, dx);
+
+                        const moveX = Math.cos(angle) * dist;
+                        const moveY = Math.sin(angle) * dist;
+
+                        joystickStick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
+                        joystick.x = moveX / maxDist;
+                        joystick.y = moveY / maxDist;
+                    }
+                }
+            });
+
+            const resetJoystick = () => {
+                joystick.active = false;
+                joystick.x = 0;
+                joystick.y = 0;
+                joystickStick.style.transform = 'translate(-50%, -50%)';
+            };
+
+            window.addEventListener('touchend', resetJoystick);
+            window.addEventListener('touchcancel', resetJoystick);
+
+            // Touch Action Buttons
+            const btnKick = document.getElementById('btn-touch-kick');
+            btnKick.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                touchState.kick = true;
+            });
+            btnKick.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                touchState.kick = false;
+            });
+
+            const btnSprint = document.getElementById('btn-touch-sprint');
+            btnSprint.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                touchState.sprint = true;
+            });
+            btnSprint.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                touchState.sprint = false;
+            });
+        }
+
+        function updateTouchVisibility() {
+            const touchUI = document.getElementById('touch-controls');
+            if (isTouchDevice || state.forceTouchControls) {
+                touchUI.classList.remove('hidden');
+            } else {
+                touchUI.classList.add('hidden');
+            }
+        }
+
+        // --- ADAPTIVE DYNAMIC CANVAS RESIZING ---
+        function fitCanvasToWindow() {
+            const container = document.getElementById('canvas-container');
+            const scaleX = container.clientWidth / canvas.width;
+            const scaleY = container.clientHeight / canvas.height;
+            const scale = Math.min(scaleX, scaleY) * 0.94;
+
+            canvas.style.transform = `scale(${scale})`;
+        }
+
+        window.addEventListener('resize', fitCanvasToWindow);
+
+        // --- EVENT LISTENERS & MODALS ---
+        document.getElementById('btn-mode-ai').addEventListener('click', () => startMatch('ai'));
+        document.getElementById('btn-mode-local').addEventListener('click', () => startMatch('local'));
+        document.getElementById('btn-mode-practice').addEventListener('click', () => startMatch('practice'));
+
+        document.getElementById('btn-pause').addEventListener('click', () => {
+            state.paused = true;
+            document.getElementById('menu-pause').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-resume').addEventListener('click', () => {
+            state.paused = false;
+            document.getElementById('menu-pause').classList.add('hidden');
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            document.getElementById('menu-pause').classList.add('hidden');
+            startMatch(state.mode);
+        });
+
+        document.getElementById('btn-exit').addEventListener('click', () => {
+            state.active = false;
+            clearInterval(timerInterval);
+            document.getElementById('menu-pause').classList.add('hidden');
+            document.getElementById('menu-main').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-rematch').addEventListener('click', () => startMatch(state.mode));
+        document.getElementById('btn-gameover-menu').addEventListener('click', () => {
+            document.getElementById('menu-gameover').classList.add('hidden');
+            document.getElementById('menu-main').classList.remove('hidden');
+        });
+
+        // Fullscreen Toggle
+        document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        // Controls Info Modal
+        document.getElementById('btn-open-controls-info').addEventListener('click', () => {
+            document.getElementById('modal-controls').classList.remove('hidden');
+        });
+        document.getElementById('btn-close-controls').addEventListener('click', () => {
+            document.getElementById('modal-controls').classList.add('hidden');
+        });
+        document.getElementById('btn-ok-controls').addEventListener('click', () => {
+            document.getElementById('modal-controls').classList.add('hidden');
+        });
+
+        // Settings Modal Handlers
+        document.getElementById('btn-open-settings').addEventListener('click', () => {
+            document.getElementById('modal-settings').classList.remove('hidden');
+        });
+        document.getElementById('btn-close-settings').addEventListener('click', () => {
+            document.getElementById('modal-settings').classList.add('hidden');
+        });
+
+        document.querySelectorAll('.btn-ai-diff').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.btn-ai-diff').forEach(b => {
+                    b.className = 'btn-ai-diff py-2 rounded-xl border border-slate-700 bg-slate-800 text-xs sm:text-sm font-bold';
+                });
+                e.target.className = 'btn-ai-diff py-2 rounded-xl border border-yellow-500 bg-yellow-500/20 text-yellow-400 text-xs sm:text-sm font-bold';
+                state.aiDifficulty = e.target.dataset.diff;
+            });
+        });
+
+        document.getElementById('btn-save-settings').addEventListener('click', () => {
+            state.matchDuration = parseInt(document.getElementById('select-time').value, 10);
+            state.stadiumSize = document.getElementById('select-stadium').value;
+            state.colors.red = document.getElementById('color-red').value;
+            state.colors.blue = document.getElementById('color-blue').value;
+            sound.enabled = document.getElementById('check-sound').checked;
+            state.forceTouchControls = document.getElementById('check-touch-override').checked;
+
+            document.getElementById('hud-red-color').style.backgroundColor = state.colors.red;
+            document.getElementById('hud-blue-color').style.backgroundColor = state.colors.blue;
+
+            initPitch();
+            updateTouchVisibility();
+            document.getElementById('modal-settings').classList.add('hidden');
+        });
+
+        // --- INIT ON LOAD ---
+        window.onload = () => {
+            initPitch();
+            fitCanvasToWindow();
+            setupTouchEvents();
+            updateTouchVisibility();
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
