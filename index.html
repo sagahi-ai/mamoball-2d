@@ -1,0 +1,1008 @@
+ <!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mamoball 2D Online Multiplayer</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #111827;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 1280px;
+            max-height: 720px;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        /* HUD Header */
+        #hud {
+            height: 60px;
+            background: #1f2937;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            border-bottom: 2px solid #374151;
+            z-index: 10;
+        }
+
+        .team-hud {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .team-color-indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+        }
+
+        .stamina-bar-bg {
+            width: 80px;
+            height: 8px;
+            background: #4b5563;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .stamina-bar-fill {
+            height: 100%;
+            width: 100%;
+            background: #10b981;
+            transition: width 0.1s linear;
+        }
+
+        #score-board {
+            background: #111827;
+            padding: 6px 18px;
+            border-radius: 20px;
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            border: 1px solid #374151;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #timer {
+            font-size: 0.9rem;
+            color: #9ca3af;
+            font-weight: normal;
+        }
+
+        /* Canvas */
+        #canvas-wrapper {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: calc(100% - 60px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #15803d;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Modals & Menus */
+        .modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(17, 24, 39, 0.92);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 20px;
+            color: #f59e0b;
+            text-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .btn:hover {
+            background: #1d4ed8;
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #4b5563;
+        }
+
+        .btn-secondary:hover {
+            background: #374151;
+        }
+
+        .btn-success {
+            background: #059669;
+        }
+
+        .btn-success:hover {
+            background: #047857;
+        }
+
+        /* Input styling */
+        input[type="text"] {
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #4b5563;
+            background: #1f2937;
+            color: #fff;
+            font-size: 1.1rem;
+            text-align: center;
+            width: 100%;
+            max-width: 320px;
+            margin-bottom: 10px;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: #3b82f6;
+        }
+
+        /* Status Indicator */
+        .status-box {
+            margin: 10px 0 20px 0;
+            padding: 10px 16px;
+            background: #1f2937;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #374151;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #eab308;
+        }
+
+        .status-dot.online { background: #10b981; }
+        .status-dot.error { background: #ef4444; }
+
+        /* Touch Controls */
+        #touch-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 15;
+            display: none;
+        }
+
+        .joystick-zone {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        .joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .action-buttons {
+            position: absolute;
+            bottom: 25px;
+            right: 25px;
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .touch-btn {
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            background: rgba(37, 99, 235, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.9rem;
+            touch-action: manipulation;
+        }
+
+        .touch-btn-boost {
+            background: rgba(16, 185, 129, 0.7);
+        }
+
+        .touch-btn:active {
+            transform: scale(0.92);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- HUD -->
+    <div id="hud">
+        <div class="team-hud">
+            <div class="team-color-indicator" style="background: #ef4444;"></div>
+            <span>КРАСНЫЕ</span>
+            <div class="stamina-bar-bg"><div id="stamina-red" class="stamina-bar-fill"></div></div>
+        </div>
+
+        <div id="score-board">
+            <span id="score-red">0</span>
+            <span>:</span>
+            <span id="score-blue">0</span>
+            <span id="timer">03:00</span>
+        </div>
+
+        <div class="team-hud">
+            <div class="stamina-bar-bg"><div id="stamina-blue" class="stamina-bar-fill"></div></div>
+            <span>СИНИЕ</span>
+            <div class="team-color-indicator" style="background: #3b82f6;"></div>
+        </div>
+    </div>
+
+    <!-- Canvas Field -->
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="1000" height="550"></canvas>
+
+        <!-- Touch UI -->
+        <div id="touch-controls">
+            <div class="joystick-zone" id="joystick">
+                <div class="joystick-stick" id="joystick-stick"></div>
+            </div>
+            <div class="action-buttons">
+                <div class="touch-btn touch-btn-boost" id="btn-boost">БУСТ</div>
+                <div class="touch-btn" id="btn-kick">УДАР</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Menu Modal -->
+    <div id="menu-modal" class="modal">
+        <h1>MAMOBALL 2D</h1>
+        <div class="btn-group">
+            <button class="btn" onclick="startLocalVS()">Локально (2 Игрока)</button>
+            <button class="btn btn-success" onclick="openOnlineMenu()">Играть По Сети (Онлайн)</button>
+            <button class="btn btn-secondary" onclick="startAI()">Против Компьютера (ИИ)</button>
+        </div>
+    </div>
+
+    <!-- Online Lobby Modal -->
+    <div id="online-modal" class="modal hidden">
+        <h2>Онлайн Игра (P2P)</h2>
+
+        <div class="status-box">
+            <div id="status-dot" class="status-dot"></div>
+            <span id="status-text">Подключение к сети...</span>
+        </div>
+
+        <div class="btn-group" id="online-controls">
+            <button class="btn" onclick="createRoom()">Создать комнату</button>
+            <hr style="border-color: #374151; margin: 5px 0;">
+            <input type="text" id="room-input" placeholder="Введите код комнаты..." maxlength="6">
+            <button class="btn btn-success" onclick="joinRoom()">Подключиться по коду</button>
+            <button class="btn btn-secondary" onclick="backToMenu()">Назад</button>
+        </div>
+
+        <div id="room-created-info" class="hidden" style="margin-top: 15px;">
+            <p style="margin-bottom: 8px;">Код вашей комнаты:</p>
+            <h1 id="room-code-display" style="letter-spacing: 5px; font-size: 2.2rem; margin-bottom: 10px;">------</h1>
+            <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 15px;">Отправьте этот код другу для подключения</p>
+            <button class="btn btn-secondary" onclick="cancelRoom()">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Goal / End Game Modal -->
+    <div id="message-overlay" class="modal hidden" style="background: rgba(0,0,0,0.6);">
+        <h1 id="message-title" style="font-size: 3.5rem;">ГОЛ!</h1>
+    </div>
+</div>
+
+<script>
+    // --- Canvas & Core Setup ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Field Dimensions
+    const FIELD = {
+        width: 1000,
+        height: 550,
+        padding: 50,
+        goalWidth: 140,
+        goalDepth: 30
+    };
+
+    // Game State
+    let mode = 'LOCAL'; // 'LOCAL', 'AI', 'HOST', 'CLIENT'
+    let isRunning = false;
+    let scoreRed = 0;
+    let scoreBlue = 0;
+    let gameTime = 180; // 3 min
+    let timerInterval = null;
+
+    // Entities
+    const ball = {
+        x: FIELD.width / 2,
+        y: FIELD.height / 2,
+        vx: 0,
+        vy: 0,
+        radius: 12,
+        color: '#ffffff',
+        friction: 0.985
+    };
+
+    const players = [
+        { id: 0, x: 200, y: FIELD.height / 2, vx: 0, vy: 0, radius: 22, color: '#ef4444', speed: 4.5, stamina: 100, isKicking: false },
+        { id: 1, x: FIELD.width - 200, y: FIELD.height / 2, vx: 0, vy: 0, radius: 22, color: '#3b82f6', speed: 4.5, stamina: 100, isKicking: false }
+    ];
+
+    // Inputs Controls
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // Mobile Detection
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        document.getElementById('touch-controls').style.display = 'block';
+        setupTouchControls();
+    }
+
+    // --- PeerJS / Online Logic ---
+    let peer = null;
+    let conn = null;
+    let myPeerId = '';
+
+    // Multiple Fallback Peer Servers for Maximum Reliability
+    const peerServers = [
+        undefined, // Default PeerJS Server
+        { host: '0.peerjs.com', port: 443, path: '/', secure: true },
+        { host: 'peerjs-server.herokuapp.com', port: 443, path: '/', secure: true }
+    ];
+    let serverIndex = 0;
+
+    function initPeerJS() {
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+
+        statusText.innerText = "Подключение к сети...";
+        statusDot.className = "status-dot";
+
+        if (peer) peer.destroy();
+
+        // Generate short 6-digit ID
+        const shortId = Math.floor(100000 + Math.random() * 900000).toString();
+
+        try {
+            peer = new Peer(shortId, peerServers[serverIndex]);
+        } catch (e) {
+            tryNextServer();
+            return;
+        }
+
+        peer.on('open', (id) => {
+            myPeerId = id;
+            statusText.innerText = "Подключено к серверу";
+            statusDot.className = "status-dot online";
+
+            // Check URL Params for direct join
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('room');
+            if (roomParam) {
+                document.getElementById('room-input').value = roomParam;
+                joinRoom();
+            }
+        });
+
+        peer.on('connection', (connection) => {
+            conn = connection;
+            setupHostConnection();
+        });
+
+        peer.on('error', (err) => {
+            console.warn("PeerJS error:", err);
+            tryNextServer();
+        });
+    }
+
+    function tryNextServer() {
+        serverIndex++;
+        if (serverIndex < peerServers.length) {
+            initPeerJS();
+        } else {
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            statusText.innerText = "Ошибка сети (Используйте VPN/Сеть)";
+            statusDot.className = "status-dot error";
+        }
+    }
+
+    function openOnlineMenu() {
+        document.getElementById('menu-modal').classList.add('hidden');
+        document.getElementById('online-modal').classList.remove('hidden');
+        if (!peer || peer.destroyed) {
+            initPeerJS();
+        }
+    }
+
+    function backToMenu() {
+        document.getElementById('online-modal').classList.add('hidden');
+        document.getElementById('menu-modal').classList.remove('hidden');
+    }
+
+    function createRoom() {
+        if (!myPeerId) return;
+        document.getElementById('online-controls').classList.add('hidden');
+        document.getElementById('room-created-info').classList.remove('hidden');
+        document.getElementById('room-code-display').innerText = myPeerId;
+        mode = 'HOST';
+    }
+
+    function cancelRoom() {
+        document.getElementById('room-created-info').classList.add('hidden');
+        document.getElementById('online-controls').classList.remove('hidden');
+        mode = 'LOCAL';
+    }
+
+    function joinRoom() {
+        const code = document.getElementById('room-input').value.trim();
+        if (!code || code.length < 5) return;
+
+        mode = 'CLIENT';
+        const statusText = document.getElementById('status-text');
+        statusText.innerText = "Подключение к комнате...";
+
+        conn = peer.connect(code);
+        setupClientConnection();
+    }
+
+    function setupHostConnection() {
+        conn.on('open', () => {
+            document.getElementById('online-modal').classList.add('hidden');
+            resetGame();
+            isRunning = true;
+            startTimer();
+        });
+
+        conn.on('data', (data) => {
+            // Host receives inputs from Client (Player 2)
+            if (data.type === 'INPUT') {
+                updatePlayerFromInput(players[1], data.input);
+            }
+        });
+    }
+
+    function setupClientConnection() {
+        conn.on('open', () => {
+            document.getElementById('online-modal').classList.add('hidden');
+            resetGame();
+            isRunning = true;
+        });
+
+        conn.on('data', (data) => {
+            // Client receives physics state from Host
+            if (data.type === 'STATE') {
+                ball.x = data.ball.x;
+                ball.y = data.ball.y;
+                players[0].x = data.p0.x;
+                players[0].y = data.p0.y;
+                players[1].x = data.p1.x;
+                players[1].y = data.p1.y;
+                scoreRed = data.scoreRed;
+                scoreBlue = data.scoreBlue;
+                gameTime = data.gameTime;
+                updateHUD();
+            }
+        });
+    }
+
+    // --- Gameplay Logic ---
+    function startLocalVS() {
+        mode = 'LOCAL';
+        document.getElementById('menu-modal').classList.add('hidden');
+        resetGame();
+        isRunning = true;
+        startTimer();
+    }
+
+    function startAI() {
+        mode = 'AI';
+        document.getElementById('menu-modal').classList.add('hidden');
+        resetGame();
+        isRunning = true;
+        startTimer();
+    }
+
+    function resetGame() {
+        scoreRed = 0;
+        scoreBlue = 0;
+        gameTime = 180;
+        resetPositions();
+        updateHUD();
+    }
+
+    function resetPositions() {
+        ball.x = FIELD.width / 2;
+        ball.y = FIELD.height / 2;
+        ball.vx = 0;
+        ball.vy = 0;
+
+        players[0].x = 200;
+        players[0].y = FIELD.height / 2;
+        players[0].vx = 0; players[0].vy = 0;
+
+        players[1].x = FIELD.width - 200;
+        players[1].y = FIELD.height / 2;
+        players[1].vx = 0; players[1].vy = 0;
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (!isRunning) return;
+            if (mode !== 'CLIENT') {
+                gameTime--;
+                if (gameTime <= 0) {
+                    gameTime = 0;
+                    isRunning = false;
+                    showMessage("МАТЧ ОКОНЧЕН!");
+                    setTimeout(() => {
+                        document.getElementById('message-overlay').classList.add('hidden');
+                        document.getElementById('menu-modal').classList.remove('hidden');
+                    }, 3000);
+                }
+            }
+        }, 1000);
+    }
+
+    function updateHUD() {
+        document.getElementById('score-red').innerText = scoreRed;
+        document.getElementById('score-blue').innerText = scoreBlue;
+
+        const m = Math.floor(gameTime / 60).toString().padStart(2, '0');
+        const s = (gameTime % 60).toString().padStart(2, '0');
+        document.getElementById('timer').innerText = `${m}:${s}`;
+
+        document.getElementById('stamina-red').style.width = `${players[0].stamina}%`;
+        document.getElementById('stamina-blue').style.width = `${players[1].stamina}%`;
+    }
+
+    function showMessage(text) {
+        const overlay = document.getElementById('message-overlay');
+        document.getElementById('message-title').innerText = text;
+        overlay.classList.remove('hidden');
+    }
+
+    // --- Control Handlers ---
+    let touchInput = { dx: 0, dy: 0, kick: false, boost: false };
+
+    function getLocalInputs() {
+        // Player 1 (P1): WASD + Space (Kick) + Shift (Boost)
+        const p1Input = {
+            up: keys['KeyW'] || false,
+            down: keys['KeyS'] || false,
+            left: keys['KeyA'] || false,
+            right: keys['KeyD'] || false,
+            kick: keys['Space'] || keys['KeyX'] || false,
+            boost: keys['ShiftLeft'] || keys['ShiftRight'] || false
+        };
+
+        // Combine touch inputs for P1 if active
+        if (touchInput.dx !== 0 || touchInput.dy !== 0) {
+            p1Input.touchDx = touchInput.dx;
+            p1Input.touchDy = touchInput.dy;
+        }
+        if (touchInput.kick) p1Input.kick = true;
+        if (touchInput.boost) p1Input.boost = true;
+
+        // Player 2 (P2): Arrows + Enter (Kick) + Right Ctrl (Boost)
+        const p2Input = {
+            up: keys['ArrowUp'] || false,
+            down: keys['ArrowDown'] || false,
+            left: keys['ArrowLeft'] || false,
+            right: keys['ArrowRight'] || false,
+            kick: keys['Enter'] || keys['KeyM'] || false,
+            boost: keys['ControlRight'] || keys['KeyK'] || false
+        };
+
+        return { p1Input, p2Input };
+    }
+
+    function updatePlayerFromInput(player, input) {
+        let moveX = 0;
+        let moveY = 0;
+
+        if (input.up) moveY -= 1;
+        if (input.down) moveY += 1;
+        if (input.left) moveX -= 1;
+        if (input.right) moveX += 1;
+
+        if (input.touchDx) moveX = input.touchDx;
+        if (input.touchDy) moveY = input.touchDy;
+
+        // Normalize
+        const len = Math.hypot(moveX, moveY);
+        if (len > 0 && !input.touchDx) {
+            moveX /= len;
+            moveY /= len;
+        }
+
+        // Stamina & Boost
+        let currentSpeed = player.speed;
+        if (input.boost && player.stamina > 5) {
+            currentSpeed *= 1.6;
+            player.stamina = Math.max(0, player.stamina - 0.8);
+        } else {
+            player.stamina = Math.min(100, player.stamina + 0.3);
+        }
+
+        player.vx = moveX * currentSpeed;
+        player.vy = moveY * currentSpeed;
+        player.isKicking = input.kick;
+    }
+
+    function updateAI(player) {
+        // Simple AI logic chasing ball
+        let dx = ball.x - player.x;
+        let dy = ball.y - player.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 0) {
+            dx /= dist;
+            dy /= dist;
+        }
+
+        player.vx = dx * (player.speed * 0.85);
+        player.vy = dy * (player.speed * 0.85);
+        player.isKicking = dist < player.radius + ball.radius + 15;
+    }
+
+    // --- Physics Engine ---
+    function updatePhysics() {
+        if (!isRunning) return;
+
+        const { p1Input, p2Input } = getLocalInputs();
+
+        if (mode === 'CLIENT') {
+            // Send Client inputs to Host
+            if (conn && conn.open) {
+                conn.send({ type: 'INPUT', input: p1Input });
+            }
+            return; // Client renders based on Host state
+        }
+
+        // Host or Local Mechanics
+        updatePlayerFromInput(players[0], p1Input);
+
+        if (mode === 'LOCAL') {
+            updatePlayerFromInput(players[1], p2Input);
+        } else if (mode === 'AI') {
+            updateAI(players[1]);
+        } // HOST receives P2 inputs over WebRTC connection
+
+        // Move Players
+        players.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // Constrain Field Bounds
+            p.x = Math.max(FIELD.padding + p.radius, Math.min(FIELD.width - FIELD.padding - p.radius, p.x));
+            p.y = Math.max(FIELD.padding + p.radius, Math.min(FIELD.height - FIELD.padding - p.radius, p.y));
+        });
+
+        // Move Ball
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+        ball.vx *= ball.friction;
+        ball.vy *= ball.friction;
+
+        // Player - Ball Collisions
+        players.forEach(p => {
+            const dx = ball.x - p.x;
+            const dy = ball.y - p.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = p.radius + ball.radius;
+
+            if (dist < minDist) {
+                const overlap = minDist - dist;
+                const nx = dx / (dist || 1);
+                const ny = dy / (dist || 1);
+
+                // Push ball out
+                ball.x += nx * overlap;
+                ball.y += ny * overlap;
+
+                // Impulse
+                let power = p.isKicking ? 12 : 5;
+                ball.vx = nx * power + p.vx * 0.5;
+                ball.vy = ny * power + p.vy * 0.5;
+            }
+        });
+
+        // Field Boundary Collisions & Goals
+        const topY = FIELD.padding;
+        const bottomY = FIELD.height - FIELD.padding;
+        const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
+        const goalBottom = FIELD.height / 2 + FIELD.goalWidth / 2;
+
+        // Top/Bottom walls
+        if (ball.y - ball.radius < topY) {
+            ball.y = topY + ball.radius;
+            ball.vy *= -0.8;
+        }
+        if (ball.y + ball.radius > bottomY) {
+            ball.y = bottomY - ball.radius;
+            ball.vy *= -0.8;
+        }
+
+        // Left wall & Red Goal Check
+        if (ball.x - ball.radius < FIELD.padding) {
+            if (ball.y > goalTop && ball.y < goalBottom) {
+                // GOAL BLUE
+                scoreBlue++;
+                handleGoal('СИНИЕ ЗАБИЛИ ГОЛ!');
+            } else {
+                ball.x = FIELD.padding + ball.radius;
+                ball.vx *= -0.8;
+            }
+        }
+
+        // Right wall & Blue Goal Check
+        if (ball.x + ball.radius > FIELD.width - FIELD.padding) {
+            if (ball.y > goalTop && ball.y < goalBottom) {
+                // GOAL RED
+                scoreRed++;
+                handleGoal('КРАСНЫЕ ЗАБИЛИ ГОЛ!');
+            } else {
+                ball.x = FIELD.width - FIELD.padding - ball.radius;
+                ball.vx *= -0.8;
+            }
+        }
+
+        // Host Network Broadcast
+        if (mode === 'HOST' && conn && conn.open) {
+            conn.send({
+                type: 'STATE',
+                ball: { x: ball.x, y: ball.y },
+                p0: { x: players[0].x, y: players[0].y },
+                p1: { x: players[1].x, y: players[1].y },
+                scoreRed,
+                scoreBlue,
+                gameTime
+            });
+        }
+
+        updateHUD();
+    }
+
+    function handleGoal(text) {
+        isRunning = false;
+        showMessage(text);
+        setTimeout(() => {
+            document.getElementById('message-overlay').classList.add('hidden');
+            resetPositions();
+            isRunning = true;
+        }, 2000);
+    }
+
+    // --- Renderer ---
+    function render() {
+        ctx.clearRect(0, 0, FIELD.width, FIELD.height);
+
+        // Grass Pattern
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+
+        // Field Lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 4;
+
+        // Outer Bounds
+        ctx.strokeRect(FIELD.padding, FIELD.padding, FIELD.width - FIELD.padding * 2, FIELD.height - FIELD.padding * 2);
+
+        // Center Line & Circle
+        ctx.beginPath();
+        ctx.moveTo(FIELD.width / 2, FIELD.padding);
+        ctx.lineTo(FIELD.width / 2, FIELD.height - FIELD.padding);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(FIELD.width / 2, FIELD.height / 2, 70, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Goals
+        const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
+
+        // Left Goal (Red side)
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+        ctx.fillRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+        ctx.strokeRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+
+        // Right Goal (Blue side)
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+        ctx.fillRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+        ctx.strokeRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+
+        // Draw Ball
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color;
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw Players
+        players.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+            ctx.strokeStyle = p.isKicking ? '#f59e0b' : '#ffffff';
+            ctx.lineWidth = p.isKicking ? 4 : 2;
+            ctx.stroke();
+        });
+    }
+
+    // --- Main Game Loop ---
+    function loop() {
+        updatePhysics();
+        render();
+        requestAnimationFrame(loop);
+    }
+    loop();
+
+    // --- Touch Controls Setup ---
+    function setupTouchControls() {
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('joystick-stick');
+        const btnKick = document.getElementById('btn-kick');
+        const btnBoost = document.getElementById('btn-boost');
+
+        let touchId = null;
+        let startX = 0, startY = 0;
+
+        joystick.addEventListener('touchstart', e => {
+            const touch = e.changedTouches[0];
+            touchId = touch.identifier;
+            const rect = joystick.getBoundingClientRect();
+            startX = rect.left + rect.width / 2;
+            startY = rect.top + rect.height / 2;
+        });
+
+        window.addEventListener('touchmove', e => {
+            if (touchId === null) return;
+            for (let touch of e.changedTouches) {
+                if (touch.identifier === touchId) {
+                    let dx = touch.clientX - startX;
+                    let dy = touch.clientY - startY;
+                    let dist = Math.hypot(dx, dy);
+                    let maxDist = 45;
+
+                    if (dist > maxDist) {
+                        dx = (dx / dist) * maxDist;
+                        dy = (dy / dist) * maxDist;
+                    }
+
+                    stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                    touchInput.dx = dx / maxDist;
+                    touchInput.dy = dy / maxDist;
+                }
+            }
+        });
+
+        const resetJoystick = () => {
+            touchId = null;
+            stick.style.transform = 'translate(-50%, -50%)';
+            touchInput.dx = 0;
+            touchInput.dy = 0;
+        };
+
+        window.addEventListener('touchend', resetJoystick);
+        window.addEventListener('touchcancel', resetJoystick);
+
+        btnKick.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.kick = true; });
+        btnKick.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.kick = false; });
+
+        btnBoost.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.boost = true; });
+        btnBoost.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.boost = false; });
+    }
+</script>
+</body>
+</html>
