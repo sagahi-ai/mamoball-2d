@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mamoball 2D Universal Fixed</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0f19;
+            color: #ffffff;
+            touch-action: none;
+        }
+
+        #app-viewport {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #0f172a;
+        }
+
+        /* Top HUD Header */
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 20px);
+            max-width: 900px;
+            height: 48px;
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 25;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+        }
+
+        .team-hud {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        .team-indicator {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+        }
+
+        .stamina-bg {
+            width: 60px;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .stamina-fill {
+            height: 100%;
+            width: 100%;
+            background: #10b981;
+            transition: width 0.1s linear;
+        }
+
+        #score-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 900;
+            font-size: 1.25rem;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 4px 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #timer-display {
+            font-size: 0.8rem;
+            color: #f59e0b;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        /* Canvas Wrapper & Container */
+        #canvas-stage {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            touch-action: none;
+        }
+
+        /* Responsive Overlay Touch Controls */
+        #touch-controls {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+            display: none; /* Hidden by default for PC/Laptops */
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 12px 18px;
+        }
+
+        .joystick-zone {
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            position: relative;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        .joystick-stick {
+            width: 36px;
+            height: 36px;
+            background: radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(200,200,200,0.5) 100%);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+
+        .touch-action-btns {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+            align-items: flex-end;
+        }
+
+        .touch-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: rgba(37, 99, 235, 0.65);
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            font-weight: 800;
+            font-size: 0.72rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            touch-action: manipulation;
+        }
+
+        .touch-btn-boost {
+            width: 44px;
+            height: 44px;
+            background: rgba(16, 185, 129, 0.65);
+            font-size: 0.68rem;
+        }
+
+        .touch-btn:active {
+            transform: scale(0.92);
+        }
+
+        /* Modals & Overlays */
+        .modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(11, 15, 25, 0.94);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 40;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 900;
+            margin-bottom: 16px;
+            color: #f59e0b;
+            text-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+        }
+
+        .btn-card {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+        }
+
+        .btn-secondary { background: #334155; }
+        .btn-success { background: #059669; }
+
+        .settings-panel {
+            background: #1e293b;
+            padding: 14px 18px;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            margin-bottom: 14px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .setting-row:last-child { margin-bottom: 0; }
+
+        select, input[type="text"] {
+            background: #0f172a;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            font-size: 0.9rem;
+            outline: none;
+            text-align: center;
+        }
+
+        .status-box {
+            margin: 10px 0 16px 0;
+            padding: 8px 14px;
+            background: #1e293b;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #334155;
+        }
+
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #eab308;
+        }
+        .status-dot.online { background: #10b981; }
+        .status-dot.error { background: #ef4444; }
+
+        /* Mobile Landscape Prompt */
+        #landscape-notice {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: #090d16;
+            z-index: 100;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            text-align: center;
+        }
+
+        @media screen and (orientation: portrait) and (max-width: 768px) {
+            #landscape-notice {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-viewport">
+    <!-- PORTRAIT ORIENTATION WARNING -->
+    <div id="landscape-notice">
+        <div style="font-size: 3rem; margin-bottom: 12px;">🔄</div>
+        <h2 style="color: #f59e0b; font-size: 1.5rem;">ПОВЕРНИТЕ ЭКРАН</h2>
+        <p style="color: #94a3b8; font-size: 0.95rem; max-width: 260px; margin-top: 6px;">
+            Для удобного управления и лучшего обзора переключите телефон в альбомный режим (Landscape).
+        </p>
+    </div>
+
+    <!-- HUD Scoreboard -->
+    <div id="hud">
+        <div class="team-hud">
+            <div class="team-indicator" style="background: #ef4444;"></div>
+            <span>КРАСНЫЕ</span>
+            <div class="stamina-bg"><div id="stamina-red" class="stamina-fill"></div></div>
+        </div>
+
+        <div id="score-box">
+            <span id="score-red" style="color: #ef4444;">0</span>
+            <span>:</span>
+            <span id="score-blue" style="color: #3b82f6;">0</span>
+            <span id="timer-display">03:00</span>
+        </div>
+
+        <div class="team-hud">
+            <div class="stamina-bg"><div id="stamina-blue" class="stamina-fill"></div></div>
+            <span>СИНИЕ</span>
+            <div class="team-indicator" style="background: #3b82f6;"></div>
+        </div>
+    </div>
+
+    <!-- Main Game Arena Stage -->
+    <div id="canvas-stage">
+        <canvas id="gameCanvas" width="1000" height="560"></canvas>
+
+        <!-- Touch Controls -->
+        <div id="touch-controls">
+            <div class="joystick-zone" id="joystick">
+                <div class="joystick-stick" id="joystick-stick"></div>
+            </div>
+            <div class="touch-action-btns">
+                <div class="touch-btn touch-btn-boost" id="btn-boost">БУСТ</div>
+                <div class="touch-btn" id="btn-kick">УДАР</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Menu Overlay -->
+    <div id="menu-modal" class="modal">
+        <h1>MAMOBALL 2D</h1>
+
+        <div class="settings-panel">
+            <div class="setting-row">
+                <span>Состав Красных:</span>
+                <select id="red-count">
+                    <option value="1">1 Игрок</option>
+                    <option value="2" selected>2 Игрока</option>
+                    <option value="3">3 Игрока</option>
+                    <option value="4">4 Игрока</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <span>Состав Синих:</span>
+                <select id="blue-count">
+                    <option value="1">1 Игрок</option>
+                    <option value="2" selected>2 Игрока</option>
+                    <option value="3">3 Игрока</option>
+                    <option value="4">4 Игрока</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <span>Сенсорный джойстик:</span>
+                <select id="touch-toggle" onchange="toggleTouchUI(this.value)">
+                    <option value="auto" selected>Авто (Только Mobile)</option>
+                    <option value="on">Включен</option>
+                    <option value="off">Выключен</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="btn-card">
+            <button class="btn btn-success" onclick="startAIMatch()">Матч против ИИ</button>
+            <button class="btn" onclick="openOnlineMenu()">Играть По Сети (Онлайн)</button>
+            <button class="btn btn-secondary" onclick="startLocalMatch()">2 Игрока (На 1 ПК)</button>
+        </div>
+    </div>
+
+    <!-- Online Lobby Overlay -->
+    <div id="online-modal" class="modal hidden">
+        <h2>Онлайн Игра (P2P)</h2>
+
+        <div class="status-box">
+            <div id="status-dot" class="status-dot"></div>
+            <span id="status-text">Подключение к сети...</span>
+        </div>
+
+        <div class="btn-card" id="online-controls">
+            <button class="btn" onclick="createRoom()">Создать комнату</button>
+            <hr style="border-color: #334155; margin: 4px 0;">
+            <input type="text" id="room-input" placeholder="Код комнаты..." maxlength="6">
+            <button class="btn btn-success" onclick="joinRoom()">Войти по коду</button>
+            <button class="btn btn-secondary" onclick="backToMenu()">Назад</button>
+        </div>
+
+        <div id="room-created-info" class="hidden" style="margin-top: 10px;">
+            <p style="font-size: 0.9rem; color: #94a3b8;">Код вашей комнаты:</p>
+            <h1 id="room-code-display" style="letter-spacing: 4px; font-size: 2.2rem; margin: 8px 0; color: #f59e0b;">------</h1>
+            <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 12px;">Ожидание подключения второго игрока...</p>
+            <button class="btn btn-secondary" onclick="cancelRoom()">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Goal Announcement -->
+    <div id="message-overlay" class="modal hidden" style="background: rgba(0,0,0,0.65);">
+        <h1 id="message-title" style="font-size: 3.2rem;">ГОЛ!</h1>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const FIELD = {
+        width: 1000,
+        height: 560,
+        padding: 50,
+        goalWidth: 140,
+        goalDepth: 35
+    };
+
+    let mode = 'AI'; // 'AI', 'LOCAL', 'HOST', 'CLIENT'
+    let isRunning = false;
+    let scoreRed = 0, scoreBlue = 0;
+    let gameTime = 180;
+    let timerInterval = null;
+    let aiTimer = 0;
+
+    let players = [];
+    const ball = {
+        x: FIELD.width / 2,
+        y: FIELD.height / 2,
+        vx: 0,
+        vy: 0,
+        radius: 11.5,
+        color: '#ffffff',
+        friction: 0.985
+    };
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // Auto Dynamic Scaling for Fullscreen Fluid Responsiveness
+    function resizeCanvasStage() {
+        const stage = document.getElementById('canvas-stage');
+        const stageW = stage.clientWidth;
+        const stageH = stage.clientHeight;
+
+        const scale = Math.min(stageW / FIELD.width, stageH / FIELD.height) * 0.98;
+        canvas.style.transform = `scale(${scale})`;
+    }
+
+    window.addEventListener('resize', resizeCanvasStage);
+    window.addEventListener('load', resizeCanvasStage);
+
+    // Precise Device Detection & Touch Control Toggle
+    function isMobileDevice() {
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+        const hasTouchScreen = ('ontouchstart' in window) && (navigator.maxTouchPoints > 0 || window.innerWidth <= 1024);
+        return isMobileUA || (hasTouchScreen && window.innerWidth <= 900);
+    }
+
+    function toggleTouchUI(setting) {
+        const controls = document.getElementById('touch-controls');
+        if (setting === 'on' || (setting === 'auto' && isMobileDevice())) {
+            controls.style.display = 'flex';
+            setupTouchControls();
+        } else {
+            controls.style.display = 'none';
+        }
+    }
+
+    // Initialize Touch Controls conditionally
+    toggleTouchUI('auto');
+
+    // SIUUU Audio Synth
+    function playSiuuuSound() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioCtx.currentTime;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(320, now);
+            osc.frequency.exponentialRampToValueAtTime(170, now + 0.45);
+            osc.frequency.exponentialRampToValueAtTime(620, now + 1.25);
+
+            gain.gain.setValueAtTime(0.45, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 1.45);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + 1.45);
+        } catch (e) {
+            console.log("Audio play blocked", e);
+        }
+    }
+
+    // PeerJS Networking setup
+    let peer = null, conn = null, myPeerId = '';
+    const peerServers = [
+        undefined,
+        { host: '0.peerjs.com', port: 443, path: '/', secure: true }
+    ];
+    let serverIndex = 0;
+
+    function initPeerJS() {
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+        statusText.innerText = "Подключение...";
+        statusDot.className = "status-dot";
+
+        if (peer) peer.destroy();
+        const shortId = Math.floor(100000 + Math.random() * 900000).toString();
+
+        try { peer = new Peer(shortId, peerServers[serverIndex]); }
+        catch (e) { tryNextServer(); return; }
+
+        peer.on('open', (id) => {
+            myPeerId = id;
+            statusText.innerText = "Сеть готова";
+            statusDot.className = "status-dot online";
+        });
+
+        peer.on('connection', (connection) => {
+            conn = connection;
+            setupHostConnection();
+        });
+
+        peer.on('error', () => tryNextServer());
+    }
+
+    function tryNextServer() {
+        serverIndex++;
+        if (serverIndex < peerServers.length) initPeerJS();
+        else {
+            document.getElementById('status-text').innerText = "Ошибка соединения";
+            document.getElementById('status-dot').className = "status-dot error";
+        }
+    }
+
+    function openOnlineMenu() {
+        document.getElementById('menu-modal').classList.add('hidden');
+        document.getElementById('online-modal').classList.remove('hidden');
+        if (!peer || peer.destroyed) initPeerJS();
+    }
+
+    function backToMenu() {
+        document.getElementById('online-modal').classList.add('hidden');
+        document.getElementById('menu-modal').classList.remove('hidden');
+    }
+
+    function createRoom() {
+        if (!myPeerId) return;
+        mode = 'HOST';
+        document.getElementById('online-controls').classList.add('hidden');
+        document.getElementById('room-created-info').classList.remove('hidden');
+        document.getElementById('room-code-display').innerText = myPeerId;
+    }
+
+    function cancelRoom() {
+        document.getElementById('room-created-info').classList.add('hidden');
+        document.getElementById('online-controls').classList.remove('hidden');
+        mode = 'AI';
+    }
+
+    function joinRoom() {
+        const code = document.getElementById('room-input').value.trim();
+        if (!code || code.length < 5) return;
+        mode = 'CLIENT';
+        conn = peer.connect(code);
+        setupClientConnection();
+    }
+
+    function setupHostConnection() {
+        conn.on('open', () => {
+            document.getElementById('online-modal').classList.add('hidden');
+            const redN = parseInt(document.getElementById('red-count').value);
+            const blueN = parseInt(document.getElementById('blue-count').value);
+            
+            initTeams(redN, blueN);
+            resetGame();
+
+            // Send full match setup to client
+            conn.send({
+                type: 'INIT_MATCH',
+                redN,
+                blueN
+            });
+
+            isRunning = true;
+            startTimer();
+        });
+
+        conn.on('data', (data) => {
+            if (data.type === 'INPUT') {
+                const guestPlayer = players.find(p => p.team === 'blue');
+                if (guestPlayer) updatePlayerFromInput(guestPlayer, data.input);
+            }
+        });
+    }
+
+    function setupClientConnection() {
+        conn.on('open', () => {
+            document.getElementById('online-modal').classList.add('hidden');
+        });
+
+        conn.on('data', (data) => {
+            if (data.type === 'INIT_MATCH') {
+                initTeams(data.redN, data.blueN);
+                resetGame();
+                isRunning = true;
+            } else if (data.type === 'STATE') {
+                ball.x = data.ball.x; ball.y = data.ball.y;
+                scoreRed = data.scoreRed; scoreBlue = data.scoreBlue;
+                gameTime = data.gameTime;
+
+                // Sync full roster of players with individual distinct coordinates
+                if (data.players && data.players.length === players.length) {
+                    data.players.forEach((pData, idx) => {
+                        players[idx].x = pData.x;
+                        players[idx].y = pData.y;
+                        players[idx].isKicking = pData.isKicking;
+                        players[idx].stamina = pData.stamina;
+                    });
+                }
+                updateHUD();
+            } else if (data.type === 'GOAL') {
+                handleGoal(data.text);
+            }
+        });
+    }
+
+    // Distinct Roster Initialization
+    function initTeams(redNum, blueNum) {
+        players = [];
+
+        // Red Team
+        for (let i = 0; i < redNum; i++) {
+            players.push({
+                id: 'red_' + i,
+                team: 'red',
+                roleIndex: i,
+                x: 200 - (i * 45),
+                y: FIELD.height / 2 + (i % 2 === 0 ? 65 * i : -65 * i),
+                vx: 0, vy: 0,
+                radius: 20,
+                color: '#ef4444',
+                speed: 4.2,
+                stamina: 100,
+                isKicking: false
+            });
+        }
+
+        // Blue Team
+        for (let i = 0; i < blueNum; i++) {
+            players.push({
+                id: 'blue_' + i,
+                team: 'blue',
+                roleIndex: i,
+                x: FIELD.width - 200 + (i * 45),
+                y: FIELD.height / 2 + (i % 2 === 0 ? 65 * i : -65 * i),
+                vx: 0, vy: 0,
+                radius: 20,
+                color: '#3b82f6',
+                speed: 4.2,
+                stamina: 100,
+                isKicking: false
+            });
+        }
+    }
+
+    function startAIMatch() {
+        mode = 'AI';
+        const redN = parseInt(document.getElementById('red-count').value);
+        const blueN = parseInt(document.getElementById('blue-count').value);
+        initTeams(redN, blueN);
+        document.getElementById('menu-modal').classList.add('hidden');
+        resetGame();
+        isRunning = true;
+        startTimer();
+    }
+
+    function startLocalMatch() {
+        mode = 'LOCAL';
+        initTeams(1, 1);
+        document.getElementById('menu-modal').classList.add('hidden');
+        resetGame();
+        isRunning = true;
+        startTimer();
+    }
+
+    function resetGame() {
+        scoreRed = 0; scoreBlue = 0; gameTime = 180;
+        resetPositions();
+        updateHUD();
+    }
+
+    function resetPositions() {
+        ball.x = FIELD.width / 2; ball.y = FIELD.height / 2;
+        ball.vx = 0; ball.vy = 0;
+
+        let rIdx = 0, bIdx = 0;
+        players.forEach(p => {
+            p.vx = 0; p.vy = 0;
+            if (p.team === 'red') {
+                p.x = 220 + (rIdx === 0 ? 0 : -60);
+                p.y = FIELD.height / 2 + (rIdx === 0 ? 0 : (rIdx % 2 === 0 ? 80 * rIdx : -80 * rIdx));
+                rIdx++;
+            } else {
+                p.x = FIELD.width - 220 + (bIdx === 0 ? 0 : 60);
+                p.y = FIELD.height / 2 + (bIdx === 0 ? 0 : (bIdx % 2 === 0 ? 80 * bIdx : -80 * bIdx));
+                bIdx++;
+            }
+        });
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (!isRunning) return;
+            if (mode !== 'CLIENT') {
+                gameTime--;
+                if (gameTime <= 0) {
+                    gameTime = 0; isRunning = false;
+                    showMessage("МАТЧ ОКОНЧЕН!");
+                    setTimeout(() => {
+                        document.getElementById('message-overlay').classList.add('hidden');
+                        document.getElementById('menu-modal').classList.remove('hidden');
+                    }, 3000);
+                }
+            }
+        }, 1000);
+    }
+
+    function updateHUD() {
+        document.getElementById('score-red').innerText = scoreRed;
+        document.getElementById('score-blue').innerText = scoreBlue;
+
+        const m = Math.floor(gameTime / 60).toString().padStart(2, '0');
+        const s = (gameTime % 60).toString().padStart(2, '0');
+        document.getElementById('timer-display').innerText = `${m}:${s}`;
+
+        const p1 = players.find(p => p.team === 'red');
+        const p2 = players.find(p => p.team === 'blue');
+        if (p1) document.getElementById('stamina-red').style.width = `${p1.stamina}%`;
+        if (p2) document.getElementById('stamina-blue').style.width = `${p2.stamina}%`;
+    }
+
+    function showMessage(text) {
+        const overlay = document.getElementById('message-overlay');
+        document.getElementById('message-title').innerText = text;
+        overlay.classList.remove('hidden');
+    }
+
+    // Control Inputs
+    let touchInput = { dx: 0, dy: 0, kick: false, boost: false };
+
+    function getP1Input() {
+        const inp = {
+            up: keys['KeyW'] || false, down: keys['KeyS'] || false,
+            left: keys['KeyA'] || false, right: keys['KeyD'] || false,
+            kick: keys['Space'] || keys['KeyX'] || false,
+            boost: keys['ShiftLeft'] || keys['ShiftRight'] || false
+        };
+        if (touchInput.dx !== 0 || touchInput.dy !== 0) {
+            inp.touchDx = touchInput.dx; inp.touchDy = touchInput.dy;
+        }
+        if (touchInput.kick) inp.kick = true;
+        if (touchInput.boost) inp.boost = true;
+        return inp;
+    }
+
+    function updatePlayerFromInput(p, input) {
+        let moveX = 0, moveY = 0;
+        if (input.up) moveY -= 1; if (input.down) moveY += 1;
+        if (input.left) moveX -= 1; if (input.right) moveX += 1;
+        if (input.touchDx) { moveX = input.touchDx; moveY = input.touchDy; }
+
+        let currentSpeed = p.speed;
+        if (input.boost && p.stamina > 5) {
+            currentSpeed *= 1.6;
+            p.stamina = Math.max(0, p.stamina - 0.7);
+        } else {
+            p.stamina = Math.min(100, p.stamina + 0.3);
+        }
+
+        p.vx = moveX * currentSpeed;
+        p.vy = moveY * currentSpeed;
+        p.isKicking = input.kick;
+    }
+
+    // Engine Loop & Independent AI Bot Behavior
+    function updatePhysics() {
+        if (!isRunning) return;
+
+        aiTimer += 0.04;
+        const p1Inp = getP1Input();
+
+        if (mode === 'CLIENT') {
+            if (conn && conn.open) conn.send({ type: 'INPUT', input: p1Inp });
+            return;
+        }
+
+        // Host or Offline Logic
+        if (players[0]) updatePlayerFromInput(players[0], p1Inp);
+
+        if (mode === 'LOCAL') {
+            const p2Inp = {
+                up: keys['ArrowUp'] || false, down: keys['ArrowDown'] || false,
+                left: keys['ArrowLeft'] || false, right: keys['ArrowRight'] || false,
+                kick: keys['Enter'] || keys['KeyM'] || false,
+                boost: keys['ControlRight'] || keys['KeyK'] || false
+            };
+            if (players[1]) updatePlayerFromInput(players[1], p2Inp);
+        } else {
+            // Unique Role-Based Bot Movement Logic
+            players.forEach((p, idx) => {
+                if (idx === 0) return; // Player 1 (User)
+                if (mode === 'HOST' && p.team === 'blue' && idx === players.findIndex(pl => pl.team === 'blue')) return; // Connected Guest
+
+                let targetX = ball.x;
+                let targetY = ball.y;
+
+                const role = p.roleIndex;
+
+                if (role === 0) {
+                    // Striker: Directly attacks ball with dynamic offset
+                    targetX = ball.x;
+                    targetY = ball.y + Math.sin(aiTimer + idx) * 12;
+                } else if (role === 1) {
+                    // Goalkeeper / Defender: Guards goal area
+                    const goalX = (p.team === 'red') ? FIELD.padding + 40 : FIELD.width - FIELD.padding - 40;
+                    targetX = (ball.x * 0.35) + (goalX * 0.65);
+                    targetY = Math.max(FIELD.height / 2 - 60, Math.min(FIELD.height / 2 + 60, ball.y));
+                } else if (role === 2) {
+                    // Midfielder / Winger Top: Supports top wing
+                    targetX = (p.team === 'red') ? Math.min(ball.x - 30, FIELD.width / 2) : Math.max(ball.x + 30, FIELD.width / 2);
+                    targetY = ball.y - 65;
+                } else {
+                    // Midfielder / Winger Bottom: Supports bottom wing
+                    targetX = (p.team === 'red') ? Math.min(ball.x - 30, FIELD.width / 2) : Math.max(ball.x + 30, FIELD.width / 2);
+                    targetY = ball.y + 65;
+                }
+
+                let dx = targetX - p.x;
+                let dy = targetY - p.y;
+                let dist = Math.hypot(dx, dy);
+
+                let desiredVx = 0;
+                let desiredVy = 0;
+
+                if (dist > 12) {
+                    desiredVx = (dx / dist) * (p.speed * 0.76);
+                    desiredVy = (dy / dist) * (p.speed * 0.76);
+                }
+
+                // Smooth Inertia (prevents cyclic jitter)
+                p.vx += (desiredVx - p.vx) * 0.12;
+                p.vy += (desiredVy - p.vy) * 0.12;
+
+                p.isKicking = Math.hypot(ball.x - p.x, ball.y - p.y) < p.radius + ball.radius + 9;
+            });
+        }
+
+        // Apply Player Position Updates & Field Boundaries
+        players.forEach(p => {
+            p.x += p.vx; p.y += p.vy;
+            p.x = Math.max(FIELD.padding + p.radius, Math.min(FIELD.width - FIELD.padding - p.radius, p.x));
+            p.y = Math.max(FIELD.padding + p.radius, Math.min(FIELD.height - FIELD.padding - p.radius, p.y));
+        });
+
+        // Ball Physics
+        ball.x += ball.vx; ball.y += ball.vy;
+        ball.vx *= ball.friction; ball.vy *= ball.friction;
+
+        // Player - Ball Collisions
+        players.forEach(p => {
+            const dx = ball.x - p.x, dy = ball.y - p.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = p.radius + ball.radius;
+
+            if (dist < minDist) {
+                const overlap = minDist - dist;
+                const nx = dx / (dist || 1), ny = dy / (dist || 1);
+                ball.x += nx * overlap; ball.y += ny * overlap;
+                let power = p.isKicking ? 13.5 : 5.5;
+                ball.vx = nx * power + p.vx * 0.5;
+                ball.vy = ny * power + p.vy * 0.5;
+            }
+        });
+
+        // Wall Boundaries & Goal Detections
+        const topY = FIELD.padding, bottomY = FIELD.height - FIELD.padding;
+        const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
+        const goalBottom = FIELD.height / 2 + FIELD.goalWidth / 2;
+
+        if (ball.y - ball.radius < topY) { ball.y = topY + ball.radius; ball.vy *= -0.8; }
+        if (ball.y + ball.radius > bottomY) { ball.y = bottomY - ball.radius; ball.vy *= -0.8; }
+
+        if (ball.x - ball.radius < FIELD.padding) {
+            if (ball.y > goalTop && ball.y < goalBottom) {
+                scoreBlue++; handleGoal('ГОЛ! СИНИЕ ЗАБИЛИ!');
+            } else { ball.x = FIELD.padding + ball.radius; ball.vx *= -0.8; }
+        }
+
+        if (ball.x + ball.radius > FIELD.width - FIELD.padding) {
+            if (ball.y > goalTop && ball.y < goalBottom) {
+                scoreRed++; handleGoal('SIUUU! ГОЛ КРАСНЫХ!');
+            } else { ball.x = FIELD.width - FIELD.padding - ball.radius; ball.vx *= -0.8; }
+        }
+
+        // Host Broadcast to Client
+        if (mode === 'HOST' && conn && conn.open) {
+            conn.send({
+                type: 'STATE',
+                ball: { x: ball.x, y: ball.y },
+                scoreRed, scoreBlue, gameTime,
+                players: players.map(p => ({
+                    x: p.x,
+                    y: p.y,
+                    isKicking: p.isKicking,
+                    stamina: p.stamina
+                }))
+            });
+        }
+
+        updateHUD();
+    }
+
+    function handleGoal(text) {
+        isRunning = false;
+        playSiuuuSound();
+        showMessage(text);
+
+        if (mode === 'HOST' && conn && conn.open) {
+            conn.send({ type: 'GOAL', text });
+        }
+
+        setTimeout(() => {
+            document.getElementById('message-overlay').classList.add('hidden');
+            resetPositions();
+            isRunning = true;
+        }, 2200);
+    }
+
+    // Render Field & Discs
+    function render() {
+        ctx.clearRect(0, 0, FIELD.width, FIELD.height);
+
+        // Grass Pattern
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+
+        // Lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(FIELD.padding, FIELD.padding, FIELD.width - FIELD.padding * 2, FIELD.height - FIELD.padding * 2);
+
+        ctx.beginPath();
+        ctx.moveTo(FIELD.width / 2, FIELD.padding);
+        ctx.lineTo(FIELD.width / 2, FIELD.height - FIELD.padding);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(FIELD.width / 2, FIELD.height / 2, 70, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Goals
+        const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+        ctx.fillRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+        ctx.strokeRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.25)';
+        ctx.fillRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+        ctx.strokeRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+
+        // Ball
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color;
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2; ctx.stroke();
+
+        // Players
+        players.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+            ctx.strokeStyle = p.isKicking ? '#f59e0b' : '#ffffff';
+            ctx.lineWidth = p.isKicking ? 4 : 2;
+            ctx.stroke();
+        });
+    }
+
+    function loop() {
+        updatePhysics();
+        render();
+        requestAnimationFrame(loop);
+    }
+    loop();
+
+    // Mobile Touch Joystick Handlers
+    function setupTouchControls() {
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('joystick-stick');
+        const btnKick = document.getElementById('btn-kick');
+        const btnBoost = document.getElementById('btn-boost');
+
+        let touchId = null, startX = 0, startY = 0;
+
+        joystick.addEventListener('touchstart', e => {
+            const touch = e.changedTouches[0];
+            touchId = touch.identifier;
+            const rect = joystick.getBoundingClientRect();
+            startX = rect.left + rect.width / 2;
+            startY = rect.top + rect.height / 2;
+        });
+
+        window.addEventListener('touchmove', e => {
+            if (touchId === null) return;
+            for (let touch of e.changedTouches) {
+                if (touch.identifier === touchId) {
+                    let dx = touch.clientX - startX, dy = touch.clientY - startY;
+                    let dist = Math.hypot(dx, dy), maxDist = 42;
+                    if (dist > maxDist) { dx = (dx / dist) * maxDist; dy = (dy / dist) * maxDist; }
+                    stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                    touchInput.dx = dx / maxDist; touchInput.dy = dy / maxDist;
+                }
+            }
+        });
+
+        const resetJoystick = () => {
+            touchId = null;
+            stick.style.transform = 'translate(-50%, -50%)';
+            touchInput.dx = 0; touchInput.dy = 0;
+        };
+
+        window.addEventListener('touchend', resetJoystick);
+        window.addEventListener('touchcancel', resetJoystick);
+
+        btnKick.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.kick = true; });
+        btnKick.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.kick = false; });
+
+        btnBoost.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.boost = true; });
+        btnBoost.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.boost = false; });
+    }
+</script>
+</body>
+</html>
