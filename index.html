@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mamoball 2D - Optimized Online Lobby</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0f172a;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+
+        /* HUD Header */
+        #hud {
+            height: 50px;
+            background: #1e293b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            border-bottom: 2px solid #334155;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+
+        .team-hud {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .team-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+        }
+
+        #score-board {
+            background: #0f172a;
+            padding: 4px 14px;
+            border-radius: 16px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            border: 1px solid #334155;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        #timer { font-size: 0.85rem; color: #94a3b8; font-weight: normal; }
+
+        /* Canvas Wrapper */
+        #canvas-wrapper {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: calc(100% - 50px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #166534;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Modals & UI */
+        .modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { font-size: 2.2rem; color: #f59e0b; margin-bottom: 12px; }
+        h2 { font-size: 1.4rem; margin-bottom: 10px; }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .btn:active { transform: scale(0.98); }
+        .btn-success { background: #16a34a; }
+        .btn-secondary { background: #475569; }
+
+        .settings-box {
+            background: #1e293b;
+            padding: 14px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            margin-bottom: 12px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        .setting-row:last-child { margin-bottom: 0; }
+
+        select, input[type="text"] {
+            background: #334155;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            font-size: 0.9rem;
+            text-align: center;
+            outline: none;
+        }
+
+        /* Lobby Status */
+        .lobby-list {
+            width: 100%;
+            max-width: 320px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        .lobby-player-slot {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px dashed #334155;
+        }
+        .lobby-player-slot:last-child { border-bottom: none; }
+
+        /* Touch Controls for Mobile ONLY */
+        #touch-controls {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 15;
+            display: none;
+        }
+
+        .joystick-zone {
+            position: absolute;
+            bottom: 20px; left: 20px;
+            width: 90px; height: 90px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        .joystick-stick {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 38px; height: 38px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .action-buttons {
+            position: absolute;
+            bottom: 20px; right: 20px;
+            display: flex; gap: 12px;
+            pointer-events: auto;
+        }
+
+        .touch-btn {
+            width: 55px; height: 55px;
+            border-radius: 50%;
+            background: rgba(37, 99, 235, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            color: white; font-weight: bold;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 0.8rem;
+            touch-action: manipulation;
+        }
+        .touch-btn-boost { background: rgba(22, 163, 74, 0.6); }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- HUD -->
+    <div id="hud">
+        <div class="team-hud">
+            <div class="team-color" style="background: #ef4444;"></div>
+            <span>КРАСНЫЕ</span>
+        </div>
+
+        <div id="score-board">
+            <span id="score-red">0</span>
+            <span>:</span>
+            <span id="score-blue">0</span>
+            <span id="timer">03:00</span>
+        </div>
+
+        <div class="team-hud">
+            <span>СИНИЕ</span>
+            <div class="team-color" style="background: #3b82f6;"></div>
+        </div>
+    </div>
+
+    <!-- Canvas -->
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="1000" height="550"></canvas>
+
+        <div id="touch-controls">
+            <div class="joystick-zone" id="joystick">
+                <div class="joystick-stick" id="joystick-stick"></div>
+            </div>
+            <div class="action-buttons">
+                <div class="touch-btn touch-btn-boost" id="btn-boost">БУСТ</div>
+                <div class="touch-btn" id="btn-kick">УДАР</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Menu -->
+    <div id="menu-modal" class="modal">
+        <h1>MAMOBALL 2D</h1>
+
+        <div class="settings-box">
+            <div class="setting-row">
+                <span>Формат матча:</span>
+                <select id="team-format">
+                    <option value="1">1v1</option>
+                    <option value="2">2v2</option>
+                    <option value="3" selected>3v3</option>
+                    <option value="4">4v4</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-success" onclick="openOnlineMenu()">Зал Ожидания (Онлайн)</button>
+            <button class="btn" onclick="startAIMatch()">Одиночная игра (против ИИ)</button>
+        </div>
+    </div>
+
+    <!-- Online Lobby Modal -->
+    <div id="online-modal" class="modal hidden">
+        <h2>Онлайн Лобби</h2>
+        <p id="lobby-status-text" style="font-size:0.85rem; color:#94a3b8;">Подключение...</p>
+
+        <div class="btn-group" id="lobby-initial-controls" style="margin-top:10px;">
+            <button class="btn" onclick="createLobby()">Создать Комнату</button>
+            <input type="text" id="room-input" placeholder="Код комнаты..." maxlength="6">
+            <button class="btn btn-success" onclick="joinLobby()">Войти по коду</button>
+            <button class="btn btn-secondary" onclick="backToMenu()">Назад</button>
+        </div>
+
+        <!-- Waiting Room View -->
+        <div id="waiting-room-view" class="hidden" style="width:100%; max-width:320px;">
+            <h1 id="lobby-code-display" style="letter-spacing: 4px; margin: 5px 0;">------</h1>
+            <p style="font-size:0.8rem; color:#94a3b8;">Отправьте код другу для входа</p>
+
+            <div class="lobby-list" id="lobby-players-list">
+                <!-- Dynamic Player Slots -->
+            </div>
+
+            <p style="font-size:0.9rem; margin-bottom:10px;">Старт через: <b id="lobby-timer-count">60</b> сек.</p>
+
+            <div class="btn-group">
+                <button class="btn btn-success" id="start-now-btn" onclick="forceStartMatch()">Начать сейчас (заполнить ИИ)</button>
+                <button class="btn btn-secondary" onclick="cancelLobby()">Выйти</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Overlay -->
+    <div id="message-overlay" class="modal hidden" style="background: rgba(0,0,0,0.6);">
+        <h1 id="message-title" style="font-size: 3rem;">ГОЛ!</h1>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const FIELD = { width: 1000, height: 550, padding: 50, goalWidth: 140, goalDepth: 30 };
+
+    let mode = 'AI'; // 'AI', 'HOST', 'CLIENT'
+    let isRunning = false;
+    let scoreRed = 0, scoreBlue = 0;
+    let gameTime = 180;
+    let timerInterval = null;
+
+    let players = [];
+    const ball = { x: FIELD.width / 2, y: FIELD.height / 2, vx: 0, vy: 0, radius: 12, color: '#ffffff', friction: 0.985 };
+
+    // Mobile check
+    const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth < 768;
+    if (isMobile) {
+        document.getElementById('touch-controls').style.display = 'block';
+        setupTouchControls();
+    }
+
+    // Controls
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // Audio SIUUU
+    function playSiuuuSound() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(180, now + 0.4);
+            osc.frequency.exponentialRampToValueAtTime(650, now + 1.2);
+
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 1.4);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 1.4);
+        } catch (e) {}
+    }
+
+    // PeerJS Networking & Lobby State
+    let peer = null;
+    let connections = []; // Host keeps track of all clients
+    let hostConn = null;  // Client link to Host
+    let myPeerId = '';
+    let lobbyTimer = 60;
+    let lobbyInterval = null;
+    let targetTeamSize = 3;
+
+    function initPeerJS() {
+        if (peer) peer.destroy();
+        const shortId = Math.floor(100000 + Math.random() * 900000).toString();
+        peer = new Peer(shortId);
+
+        peer.on('open', id => {
+            myPeerId = id;
+            document.getElementById('lobby-status-text').innerText = "Готов к онлайн-игре";
+        });
+
+        peer.on('connection', conn => {
+            if (mode === 'HOST') {
+                connections.push(conn);
+                setupHostClientLink(conn);
+            }
+        });
+    }
+
+    function openOnlineMenu() {
+        document.getElementById('menu-modal').classList.add('hidden');
+        document.getElementById('online-modal').classList.remove('hidden');
+        if (!peer || peer.destroyed) initPeerJS();
+    }
+
+    function backToMenu() {
+        document.getElementById('online-modal').classList.add('hidden');
+        document.getElementById('menu-modal').classList.remove('hidden');
+    }
+
+    function createLobby() {
+        if (!myPeerId) return;
+        mode = 'HOST';
+        targetTeamSize = parseInt(document.getElementById('team-format').value);
+        document.getElementById('lobby-initial-controls').classList.add('hidden');
+        document.getElementById('waiting-room-view').classList.remove('hidden');
+        document.getElementById('lobby-code-display').innerText = myPeerId;
+
+        startLobbyCountdown();
+        updateLobbyUI();
+    }
+
+    function joinLobby() {
+        const code = document.getElementById('room-input').value.trim();
+        if (!code || code.length < 5) return;
+        mode = 'CLIENT';
+
+        hostConn = peer.connect(code);
+        document.getElementById('lobby-status-text').innerText = "Подключение к комнате...";
+
+        hostConn.on('open', () => {
+            document.getElementById('lobby-initial-controls').classList.add('hidden');
+            document.getElementById('waiting-room-view').classList.remove('hidden');
+            document.getElementById('start-now-btn').classList.add('hidden'); // Only Host can start
+            document.getElementById('lobby-code-display').innerText = code;
+        });
+
+        hostConn.on('data', data => {
+            if (data.type === 'LOBBY_UPDATE') {
+                targetTeamSize = data.teamSize;
+                document.getElementById('lobby-timer-count').innerText = data.timer;
+                renderLobbyList(data.connectedCount, data.teamSize);
+            } else if (data.type === 'START_MATCH') {
+                document.getElementById('online-modal').classList.add('hidden');
+                initTeams(data.teamSize, data.teamSize);
+                resetGame();
+                isRunning = true;
+            } else if (data.type === 'STATE') {
+                ball.x = data.ball.x; ball.y = data.ball.y;
+                scoreRed = data.scoreRed; scoreBlue = data.scoreBlue;
+                gameTime = data.gameTime;
+                data.players.forEach((pData, idx) => {
+                    if (players[idx]) { players[idx].x = pData.x; players[idx].y = pData.y; }
+                });
+                updateHUD();
+            } else if (data.type === 'GOAL') {
+                handleGoal(data.text);
+            }
+        });
+    }
+
+    function setupHostClientLink(conn) {
+        conn.on('data', data => {
+            if (data.type === 'INPUT') {
+                const connIdx = connections.indexOf(conn);
+                if (connIdx !== -1) {
+                    // Assign client to Red/Blue based on slot
+                    let pTarget = players[connIdx + 1]; 
+                    if (pTarget) updatePlayerFromInput(pTarget, data.input);
+                }
+            }
+        });
+    }
+
+    function startLobbyCountdown() {
+        lobbyTimer = 60;
+        clearInterval(lobbyInterval);
+        lobbyInterval = setInterval(() => {
+            lobbyTimer--;
+            document.getElementById('lobby-timer-count').innerText = lobbyTimer;
+            
+            // Broadcast Lobby State
+            broadcastToClients({
+                type: 'LOBBY_UPDATE',
+                timer: lobbyTimer,
+                connectedCount: connections.length + 1,
+                teamSize: targetTeamSize
+            });
+            updateLobbyUI();
+
+            if (lobbyTimer <= 0) {
+                forceStartMatch();
+            }
+        }, 1000);
+    }
+
+    function updateLobbyUI() {
+        renderLobbyList(connections.length + 1, targetTeamSize);
+    }
+
+    function renderLobbyList(connected, teamSize) {
+        const totalSlots = teamSize * 2;
+        const listContainer = document.getElementById('lobby-players-list');
+        listContainer.innerHTML = '';
+
+        for (let i = 0; i < totalSlots; i++) {
+            const div = document.createElement('div');
+            div.className = 'lobby-player-slot';
+            const teamName = i < teamSize ? 'Красные' : 'Синие';
+            
+            if (i < connected) {
+                div.innerHTML = `<span>Слот ${i+1} (${teamName})</span> <b style="color:#10b981;">Игрок</b>`;
+            } else {
+                div.innerHTML = `<span>Слот ${i+1} (${teamName})</span> <span style="color:#94a3b8;">Бот (ИИ)</span>`;
+            }
+            listContainer.appendChild(div);
+        }
+    }
+
+    function forceStartMatch() {
+        if (mode !== 'HOST') return;
+        clearInterval(lobbyInterval);
+
+        broadcastToClients({ type: 'START_MATCH', teamSize: targetTeamSize });
+        document.getElementById('online-modal').classList.add('hidden');
+        initTeams(targetTeamSize, targetTeamSize);
+        resetGame();
+        isRunning = true;
+        startTimer();
+    }
+
+    function cancelLobby() {
+        clearInterval(lobbyInterval);
+        document.getElementById('waiting-room-view').classList.add('hidden');
+        document.getElementById('lobby-initial-controls').classList.remove('hidden');
+        mode = 'AI';
+    }
+
+    function broadcastToClients(msg) {
+        connections.forEach(c => { if (c.open) c.send(msg); });
+    }
+
+    // Gameplay & Teams Setup
+    function initTeams(redNum, blueNum) {
+        players = [];
+        for (let i = 0; i < redNum; i++) {
+            players.push({
+                id: i, team: 'red',
+                x: 200 + (i === 0 ? 0 : -60),
+                y: FIELD.height / 2 + (i === 0 ? 0 : (i % 2 === 0 ? 80 * i : -80 * i)),
+                vx: 0, vy: 0, radius: 20, color: '#ef4444', speed: 4.2, stamina: 100, isKicking: false
+            });
+        }
+        for (let i = 0; i < blueNum; i++) {
+            players.push({
+                id: redNum + i, team: 'blue',
+                x: FIELD.width - 200 + (i === 0 ? 0 : 60),
+                y: FIELD.height / 2 + (i === 0 ? 0 : (i % 2 === 0 ? 80 * i : -80 * i)),
+                vx: 0, vy: 0, radius: 20, color: '#3b82f6', speed: 4.2, stamina: 100, isKicking: false
+            });
+        }
+    }
+
+    function startAIMatch() {
+        mode = 'AI';
+        targetTeamSize = parseInt(document.getElementById('team-format').value);
+        initTeams(targetTeamSize, targetTeamSize);
+        document.getElementById('menu-modal').classList.add('hidden');
+        resetGame();
+        isRunning = true;
+        startTimer();
+    }
+
+    function resetGame() {
+        scoreRed = 0; scoreBlue = 0; gameTime = 180;
+        resetPositions();
+        updateHUD();
+    }
+
+    function resetPositions() {
+        ball.x = FIELD.width / 2; ball.y = FIELD.height / 2;
+        ball.vx = 0; ball.vy = 0;
+
+        let rIdx = 0, bIdx = 0;
+        players.forEach(p => {
+            p.vx = 0; p.vy = 0;
+            if (p.team === 'red') {
+                p.x = 220 + (rIdx === 0 ? 0 : -70);
+                p.y = FIELD.height / 2 + (rIdx === 0 ? 0 : (rIdx % 2 === 0 ? 90 * rIdx : -90 * rIdx));
+                rIdx++;
+            } else {
+                p.x = FIELD.width - 220 - (bIdx === 0 ? 0 : -70);
+                p.y = FIELD.height / 2 + (bIdx === 0 ? 0 : (bIdx % 2 === 0 ? 90 * bIdx : -90 * bIdx));
+                bIdx++;
+            }
+        });
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (!isRunning) return;
+            if (mode !== 'CLIENT') {
+                gameTime--;
+                if (gameTime <= 0) {
+                    gameTime = 0; isRunning = false;
+                    showMessage("МАТЧ ОКОНЧЕН!");
+                    setTimeout(() => {
+                        document.getElementById('message-overlay').classList.add('hidden');
+                        document.getElementById('menu-modal').classList.remove('hidden');
+                    }, 3000);
+                }
+            }
+        }, 1000);
+    }
+
+    function updateHUD() {
+        document.getElementById('score-red').innerText = scoreRed;
+        document.getElementById('score-blue').innerText = scoreBlue;
+
+        const m = Math.floor(gameTime / 60).toString().padStart(2, '0');
+        const s = (gameTime % 60).toString().padStart(2, '0');
+        document.getElementById('timer').innerText = `${m}:${s}`;
+    }
+
+    function showMessage(text) {
+        const overlay = document.getElementById('message-overlay');
+        document.getElementById('message-title').innerText = text;
+        overlay.classList.remove('hidden');
+    }
+
+    // Input Handling
+    let touchInput = { dx: 0, dy: 0, kick: false, boost: false };
+
+    function getLocalInput() {
+        const inp = {
+            up: keys['KeyW'] || keys['ArrowUp'] || false,
+            down: keys['KeyS'] || keys['ArrowDown'] || false,
+            left: keys['KeyA'] || keys['ArrowLeft'] || false,
+            right: keys['KeyD'] || keys['ArrowRight'] || false,
+            kick: keys['Space'] || keys['KeyX'] || keys['Enter'] || false,
+            boost: keys['ShiftLeft'] || keys['ShiftRight'] || false
+        };
+        if (touchInput.dx !== 0 || touchInput.dy !== 0) {
+            inp.touchDx = touchInput.dx; inp.touchDy = touchInput.dy;
+        }
+        if (touchInput.kick) inp.kick = true;
+        if (touchInput.boost) inp.boost = true;
+        return inp;
+    }
+
+    function updatePlayerFromInput(p, input) {
+        let moveX = 0, moveY = 0;
+        if (input.up) moveY -= 1; if (input.down) moveY += 1;
+        if (input.left) moveX -= 1; if (input.right) moveX += 1;
+        if (input.touchDx) { moveX = input.touchDx; moveY = input.touchDy; }
+
+        let currentSpeed = p.speed;
+        if (input.boost && p.stamina > 5) {
+            currentSpeed *= 1.5;
+            p.stamina = Math.max(0, p.stamina - 0.7);
+        } else {
+            p.stamina = Math.min(100, p.stamina + 0.3);
+        }
+
+        p.vx = moveX * currentSpeed;
+        p.vy = moveY * currentSpeed;
+        p.isKicking = input.kick;
+    }
+
+    let aiTick = 0;
+    function updatePhysics() {
+        if (!isRunning) return;
+
+        const myInput = getLocalInput();
+
+        if (mode === 'CLIENT') {
+            if (hostConn && hostConn.open) hostConn.send({ type: 'INPUT', input: myInput });
+            return;
+        }
+
+        // Host or Offline logic
+        if (players[0]) updatePlayerFromInput(players[0], myInput);
+
+        aiTick += 0.05;
+
+        // Controlled players count
+        const humanSlots = 1 + connections.length;
+
+        // AI Loop for unassigned slots
+        players.forEach((p, idx) => {
+            if (idx < humanSlots) return; // Skip human slots
+
+            let targetX = ball.x, targetY = ball.y;
+            const teamIndex = players.filter((item, i) => i < idx && item.team === p.team).length;
+
+            if (teamIndex === 0) {
+                targetX = ball.x; targetY = ball.y + Math.sin(aiTick + idx) * 10;
+            } else if (teamIndex === 1) {
+                const ownGoalX = (p.team === 'red') ? FIELD.padding : FIELD.width - FIELD.padding;
+                targetX = (ball.x + ownGoalX) / 2;
+                targetY = ball.y * 0.6 + (FIELD.height / 2) * 0.4;
+            } else {
+                targetX = (p.team === 'red') ? Math.min(ball.x - 40, FIELD.width / 2) : Math.max(ball.x + 40, FIELD.width / 2);
+                targetY = ball.y + (idx % 2 === 0 ? 60 : -60);
+            }
+
+            let dx = targetX - p.x, dy = targetY - p.y;
+            let dist = Math.hypot(dx, dy);
+
+            let desiredVx = 0, desiredVy = 0;
+            if (dist > 15) {
+                desiredVx = (dx / dist) * (p.speed * 0.75);
+                desiredVy = (dy / dist) * (p.speed * 0.75);
+            }
+
+            p.vx += (desiredVx - p.vx) * 0.1;
+            p.vy += (desiredVy - p.vy) * 0.1;
+            p.isKicking = Math.hypot(ball.x - p.x, ball.y - p.y) < p.radius + ball.radius + 8;
+        });
+
+        // Apply movement
+        players.forEach(p => {
+            p.x += p.vx; p.y += p.vy;
+            p.x = Math.max(FIELD.padding + p.radius, Math.min(FIELD.width - FIELD.padding - p.radius, p.x));
+            p.y = Math.max(FIELD.padding + p.radius, Math.min(FIELD.height - FIELD.padding - p.radius, p.y));
+        });
+
+        ball.x += ball.vx; ball.y += ball.vy;
+        ball.vx *= ball.friction; ball.vy *= ball.friction;
+
+        // Collisions
+        players.forEach(p => {
+            const dx = ball.x - p.x, dy = ball.y - p.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = p.radius + ball.radius;
+
+            if (dist < minDist) {
+                const overlap = minDist - dist;
+                const nx = dx / (dist || 1), ny = dy / (dist || 1);
+                ball.x += nx * overlap; ball.y += ny * overlap;
+                let power = p.isKicking ? 13 : 5;
+                ball.vx = nx * power + p.vx * 0.5;
+                ball.vy = ny * power + p.vy * 0.5;
+            }
+        });
+
+        // Goals
+        const topY = FIELD.padding, bottomY = FIELD.height - FIELD.padding;
+        const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
+        const goalBottom = FIELD.height / 2 + FIELD.goalWidth / 2;
+
+        if (ball.y - ball.radius < topY) { ball.y = topY + ball.radius; ball.vy *= -0.8; }
+        if (ball.y + ball.radius > bottomY) { ball.y = bottomY - ball.radius; ball.vy *= -0.8; }
+
+        if (ball.x - ball.radius < FIELD.padding) {
+            if (ball.y > goalTop && ball.y < goalBottom) {
+                scoreBlue++; handleGoal('ГОЛ! СИНИЕ ЗАБИЛИ!');
+            } else { ball.x = FIELD.padding + ball.radius; ball.vx *= -0.8; }
+        }
+
+        if (ball.x + ball.radius > FIELD.width - FIELD.padding) {
+            if (ball.y > goalTop && ball.y < goalBottom) {
+                scoreRed++; handleGoal('SIUUU! ГОЛ КРАСНЫХ!');
+            } else { ball.x = FIELD.width - FIELD.padding - ball.radius; ball.vx *= -0.8; }
+        }
+
+        // Host Network State Broadcast
+        if (mode === 'HOST' && connections.length > 0) {
+            broadcastToClients({
+                type: 'STATE',
+                ball: { x: ball.x, y: ball.y },
+                scoreRed, scoreBlue, gameTime,
+                players: players.map(p => ({ x: p.x, y: p.y }))
+            });
+        }
+
+        updateHUD();
+    }
+
+    function handleGoal(text) {
+        isRunning = false;
+        playSiuuuSound();
+        showMessage(text);
+
+        if (mode === 'HOST') {
+            broadcastToClients({ type: 'GOAL', text });
+        }
+
+        setTimeout(() => {
+            document.getElementById('message-overlay').classList.add('hidden');
+            resetPositions();
+            isRunning = true;
+        }, 2200);
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, FIELD.width, FIELD.height);
+
+        // Grass
+        ctx.fillStyle = '#166534';
+        ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+
+        // Lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(FIELD.padding, FIELD.padding, FIELD.width - FIELD.padding * 2, FIELD.height - FIELD.padding * 2);
+
+        ctx.beginPath();
+        ctx.moveTo(FIELD.width / 2, FIELD.padding);
+        ctx.lineTo(FIELD.width / 2, FIELD.height - FIELD.padding);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(FIELD.width / 2, FIELD.height / 2, 70, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Goals
+        const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+        ctx.fillRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+        ctx.strokeRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+        ctx.fillRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+        ctx.strokeRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
+
+        // Ball
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color;
+        ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+
+        // Players
+        players.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+            ctx.strokeStyle = p.isKicking ? '#f59e0b' : '#ffffff';
+            ctx.lineWidth = p.isKicking ? 4 : 2;
+            ctx.stroke();
+        });
+    }
+
+    // Frame Rate Limiter Loop (Prevents Overheating)
+    let lastFrameTime = 0;
+    const targetFPS = 60;
+    const frameInterval = 1000 / targetFPS;
+
+    function loop(currentTime) {
+        requestAnimationFrame(loop);
+        const elapsed = currentTime - lastFrameTime;
+
+        if (elapsed > frameInterval) {
+            lastFrameTime = currentTime - (elapsed % frameInterval);
+            updatePhysics();
+            render();
+        }
+    }
+    requestAnimationFrame(loop);
+
+    // Touch Controls
+    function setupTouchControls() {
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('joystick-stick');
+        const btnKick = document.getElementById('btn-kick');
+        const btnBoost = document.getElementById('btn-boost');
+
+        let touchId = null, startX = 0, startY = 0;
+
+        joystick.addEventListener('touchstart', e => {
+            const touch = e.changedTouches[0];
+            touchId = touch.identifier;
+            const rect = joystick.getBoundingClientRect();
+            startX = rect.left + rect.width / 2;
+            startY = rect.top + rect.height / 2;
+        });
+
+        window.addEventListener('touchmove', e => {
+            if (touchId === null) return;
+            for (let touch of e.changedTouches) {
+                if (touch.identifier === touchId) {
+                    let dx = touch.clientX - startX, dy = touch.clientY - startY;
+                    let dist = Math.hypot(dx, dy), maxDist = 35;
+                    if (dist > maxDist) { dx = (dx / dist) * maxDist; dy = (dy / dist) * maxDist; }
+                    stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                    touchInput.dx = dx / maxDist; touchInput.dy = dy / maxDist;
+                }
+            }
+        });
+
+        const resetJoystick = () => {
+            touchId = null;
+            stick.style.transform = 'translate(-50%, -50%)';
+            touchInput.dx = 0; touchInput.dy = 0;
+        };
+
+        window.addEventListener('touchend', resetJoystick);
+        window.addEventListener('touchcancel', resetJoystick);
+
+        btnKick.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.kick = true; });
+        btnKick.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.kick = false; });
+
+        btnBoost.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.boost = true; });
+        btnBoost.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.boost = false; });
+    }
+</script>
+</body>
+</html>
