@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Mamoball 2D - Instant Dynamic Rooms</title>
+    <title>Mamoball 2D - Fixed & Synced</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * {
@@ -319,6 +319,18 @@
     <div id="menu-modal" class="modal">
         <h1>MAMOBALL 2D</h1>
 
+        <div class="settings-box">
+            <div class="setting-row">
+                <span>Формат матча:</span>
+                <select id="main-team-format">
+                    <option value="1">1v1</option>
+                    <option value="2">2v2</option>
+                    <option value="3" selected>3v3</option>
+                    <option value="4">4v4</option>
+                </select>
+            </div>
+        </div>
+
         <div class="btn-group">
             <button class="btn btn-success" onclick="openServerBrowser()">🌐 Список Серверов (Онлайн)</button>
             <button class="btn" onclick="openHostModal()">➕ Создать Свой Сервер</button>
@@ -462,7 +474,6 @@
                 setupHostClientLink(conn);
                 updateLobbyUI();
 
-                // Если кто-то зашел — запускаем динамичный таймер на 10 сек
                 if (!isCountingDown) {
                     startDynamicCountdown();
                 }
@@ -473,6 +484,9 @@
     function openHostModal() {
         document.getElementById('menu-modal').classList.add('hidden');
         document.getElementById('host-modal').classList.remove('hidden');
+        // Синхронизируем селектор в создании сервера с главным меню
+        const mainVal = document.getElementById('main-team-format').value;
+        document.getElementById('team-format').value = mainVal;
     }
     function closeHostModal() {
         document.getElementById('host-modal').classList.add('hidden');
@@ -500,6 +514,7 @@
             document.getElementById('online-modal').classList.remove('hidden');
             document.getElementById('room-title-display').innerText = serverName;
             document.getElementById('timer-container').style.display = 'none';
+            document.getElementById('start-now-btn').classList.remove('hidden');
             
             registerActiveServer();
             updateLobbyUI();
@@ -515,7 +530,6 @@
         } catch(e){}
     }
 
-    // Периодическое обновление статуса сервера в localStorage
     setInterval(() => {
         if (mode === 'HOST') registerActiveServer();
     }, 5000);
@@ -572,6 +586,8 @@
                 initTeams(data.teamSize, data.teamSize);
                 resetGame();
                 isRunning = true;
+            } else if (data.type === 'RETURN_TO_LOBBY') {
+                returnClientToLobby(data.serverName, data.teamSize);
             } else if (data.type === 'STATE') {
                 ball.x = data.ball.x; ball.y = data.ball.y;
                 scoreRed = data.scoreRed; scoreBlue = data.scoreBlue;
@@ -671,6 +687,18 @@
         startTimer();
     }
 
+    function returnClientToLobby(sName, tSize) {
+        isRunning = false;
+        document.getElementById('message-overlay').classList.add('hidden');
+        document.getElementById('online-modal').classList.remove('hidden');
+        document.getElementById('room-title-display').innerText = sName;
+        document.getElementById('lobby-status-text').innerText = "Матч окончен. Возврат в лобби...";
+        document.getElementById('timer-container').style.display = 'block';
+        document.getElementById('start-now-btn').classList.add('hidden');
+        targetTeamSize = tSize;
+        updateLobbyUI();
+    }
+
     function cancelLobby() {
         clearInterval(lobbyInterval);
         isCountingDown = false;
@@ -680,6 +708,7 @@
                 servers = servers.filter(s => s.id !== myPeerId);
                 localStorage.setItem('mamo_servers', JSON.stringify(servers));
             } catch(e){}
+            broadcastToClients({ type: 'RETURN_TO_LOBBY', serverName, teamSize: targetTeamSize });
         }
         document.getElementById('online-modal').classList.add('hidden');
         document.getElementById('menu-modal').classList.remove('hidden');
@@ -712,7 +741,7 @@
 
     function startAIMatch() {
         mode = 'AI';
-        targetTeamSize = parseInt(document.getElementById('team-format') ? document.getElementById('team-format').value : 3) || 3;
+        targetTeamSize = parseInt(document.getElementById('main-team-format').value) || 3;
         initTeams(targetTeamSize, targetTeamSize);
         document.getElementById('menu-modal').classList.add('hidden');
         resetGame();
@@ -752,15 +781,34 @@
             if (mode !== 'CLIENT') {
                 gameTime--;
                 if (gameTime <= 0) {
-                    gameTime = 0; isRunning = false;
-                    showMessage("МАТЧ ОКОНЧЕН!");
-                    setTimeout(() => {
-                        document.getElementById('message-overlay').classList.add('hidden');
-                        document.getElementById('menu-modal').classList.remove('hidden');
-                    }, 3000);
+                    gameTime = 0; 
+                    isRunning = false;
+                    handleMatchEnd();
                 }
             }
         }, 1000);
+    }
+
+    function handleMatchEnd() {
+        showMessage("МАТЧ ОКОНЧЕН!");
+
+        if (mode === 'HOST') {
+            broadcastToClients({ type: 'RETURN_TO_LOBBY', serverName, teamSize: targetTeamSize });
+        }
+
+        setTimeout(() => {
+            document.getElementById('message-overlay').classList.add('hidden');
+            if (mode === 'AI') {
+                document.getElementById('menu-modal').classList.remove('hidden');
+            } else if (mode === 'HOST') {
+                document.getElementById('online-modal').classList.remove('hidden');
+                document.getElementById('room-title-display').innerText = serverName;
+                document.getElementById('lobby-status-text').innerText = "Матч окончен. Снова в лобби!";
+                document.getElementById('timer-container').style.display = 'block';
+                document.getElementById('start-now-btn').classList.remove('hidden');
+                updateLobbyUI();
+            }
+        }, 3000);
     }
 
     function updateHUD() {
