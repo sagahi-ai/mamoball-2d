@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Mamoball 2D - Server Browser & Optimized</title>
+    <title>Mamoball 2D - Instant Dynamic Rooms</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * {
@@ -177,7 +177,7 @@
         .server-list-container {
             width: 100%;
             max-width: 360px;
-            max-height: 200px;
+            max-height: 220px;
             overflow-y: auto;
             background: #1e293b;
             border: 1px solid #334155;
@@ -208,7 +208,6 @@
             cursor: pointer;
         }
 
-        /* Lobby Player List */
         .lobby-list {
             width: 100%;
             max-width: 360px;
@@ -356,9 +355,7 @@
         <h2>Доступные Серверы</h2>
         <p id="browser-status" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Поиск открытых серверов...</p>
         
-        <div class="server-list-container" id="server-list">
-            <!-- Dynamic servers -->
-        </div>
+        <div class="server-list-container" id="server-list"></div>
 
         <div class="btn-group">
             <button class="btn btn-secondary" onclick="refreshServers()">🔄 Обновить список</button>
@@ -369,17 +366,15 @@
     <!-- Waiting Room / Lobby Modal -->
     <div id="online-modal" class="modal hidden">
         <h2 id="room-title-display">Комната ожидания</h2>
-        <p id="lobby-status-text" style="font-size:0.85rem; color:#94a3b8;">Подключение...</p>
+        <p id="lobby-status-text" style="font-size:0.85rem; color:#94a3b8;">Ожидание игроков...</p>
 
         <div id="waiting-room-view" style="width:100%; max-width:360px;">
-            <div class="lobby-list" id="lobby-players-list">
-                <!-- Dynamic Player Slots -->
-            </div>
+            <div class="lobby-list" id="lobby-players-list"></div>
 
-            <p style="font-size:0.9rem; margin-bottom:10px;">Старт через: <b id="lobby-timer-count">60</b> сек.</p>
+            <p id="timer-container" style="font-size:0.9rem; margin-bottom:10px; display:none;">Старт через: <b id="lobby-timer-count">10</b> сек.</p>
 
             <div class="btn-group">
-                <button class="btn btn-success" id="start-now-btn" onclick="forceStartMatch()">Начать сейчас (заполнить ИИ)</button>
+                <button class="btn btn-success" id="start-now-btn" onclick="forceStartMatch()">Начать матч сейчас</button>
                 <button class="btn btn-secondary" onclick="cancelLobby()">Выйти</button>
             </div>
         </div>
@@ -416,7 +411,6 @@
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    // Audio SIUUU
     function playSiuuuSound() {
         try {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -439,16 +433,15 @@
         } catch (e) {}
     }
 
-    // PeerJS Networking & Public Server Discovery using PeerJS custom broker
     let peer = null;
     let connections = []; 
     let hostConn = null;  
     let myPeerId = '';
-    let lobbyTimer = 60;
+    let lobbyTimer = 10;
     let lobbyInterval = null;
     let targetTeamSize = 3;
     let serverName = "Игровая комната";
-    let discoveredServers = [];
+    let isCountingDown = false;
 
     function initPeerJS(onOpenCallback) {
         if (peer && !peer.destroyed) {
@@ -467,11 +460,16 @@
             if (mode === 'HOST') {
                 connections.push(conn);
                 setupHostClientLink(conn);
+                updateLobbyUI();
+
+                // Если кто-то зашел — запускаем динамичный таймер на 10 сек
+                if (!isCountingDown) {
+                    startDynamicCountdown();
+                }
             }
         });
     }
 
-    // Menu Navigation
     function openHostModal() {
         document.getElementById('menu-modal').classList.add('hidden');
         document.getElementById('host-modal').classList.remove('hidden');
@@ -490,20 +488,20 @@
         document.getElementById('menu-modal').classList.remove('hidden');
     }
 
-    // Server Hosting
     function createRoom() {
         serverName = document.getElementById('server-name-input').value.trim() || "Комната";
         targetTeamSize = parseInt(document.getElementById('team-format').value);
         
         initPeerJS(() => {
             mode = 'HOST';
+            connections = [];
+            isCountingDown = false;
             document.getElementById('host-modal').classList.add('hidden');
             document.getElementById('online-modal').classList.remove('hidden');
             document.getElementById('room-title-display').innerText = serverName;
+            document.getElementById('timer-container').style.display = 'none';
             
-            // Register server announcement periodically via localStorage/broadcast simulation
             registerActiveServer();
-            startLobbyCountdown();
             updateLobbyUI();
         });
     }
@@ -511,19 +509,23 @@
     function registerActiveServer() {
         try {
             let servers = JSON.parse(localStorage.getItem('mamo_servers') || '[]');
-            servers = servers.filter(s => Date.now() - s.time < 30000); // keep alive 30s
+            servers = servers.filter(s => s.id !== myPeerId && Date.now() - s.time < 20000);
             servers.push({ id: myPeerId, name: serverName, teamSize: targetTeamSize, time: Date.now() });
             localStorage.setItem('mamo_servers', JSON.stringify(servers));
         } catch(e){}
     }
 
+    // Периодическое обновление статуса сервера в localStorage
+    setInterval(() => {
+        if (mode === 'HOST') registerActiveServer();
+    }, 5000);
+
     function refreshServers() {
         document.getElementById('browser-status').innerText = "Поиск активных серверов...";
         try {
             let servers = JSON.parse(localStorage.getItem('mamo_servers') || '[]');
-            servers = servers.filter(s => Date.now() - s.time < 35000);
+            servers = servers.filter(s => Date.now() - s.time < 25000);
             localStorage.setItem('mamo_servers', JSON.stringify(servers));
-            discoveredServers = servers;
             
             const listEl = document.getElementById('server-list');
             listEl.innerHTML = '';
@@ -537,7 +539,7 @@
             servers.forEach(srv => {
                 const item = document.createElement('div');
                 item.className = 'server-item';
-                item.innerHTML = `<span><b>${srv.name}</b> (${srv.teamSize * 2} игроков)</span> <button onclick="joinServer('${srv.id}')">Войти</button>`;
+                item.innerHTML = `<span><b>${srv.name}</b> (${srv.teamSize * 2} мест)</span> <button onclick="joinServer('${srv.id}')">Войти</button>`;
                 listEl.appendChild(item);
             });
         } catch(e) {
@@ -549,18 +551,20 @@
         mode = 'CLIENT';
         document.getElementById('browser-modal').classList.add('hidden');
         document.getElementById('online-modal').classList.remove('hidden');
-        document.getElementById('start-now-btn').classList.add('hidden'); // Only host starts
+        document.getElementById('start-now-btn').classList.add('hidden'); 
+        document.getElementById('timer-container').style.display = 'block';
 
         hostConn = peer.connect(id);
         document.getElementById('lobby-status-text').innerText = "Подключение к серверу...";
 
         hostConn.on('open', () => {
-            document.getElementById('lobby-status-text').innerText = "Подключено к серверу!";
+            document.getElementById('lobby-status-text').innerText = "Успешно подключено!";
         });
 
         hostConn.on('data', data => {
             if (data.type === 'LOBBY_UPDATE') {
                 targetTeamSize = data.teamSize;
+                document.getElementById('room-title-display').innerText = data.serverName;
                 document.getElementById('lobby-timer-count').innerText = data.timer;
                 renderLobbyList(data.connectedCount, data.teamSize);
             } else if (data.type === 'START_MATCH') {
@@ -592,21 +596,28 @@
                 }
             }
         });
+        conn.on('close', () => {
+            connections = connections.filter(c => c !== conn);
+            updateLobbyUI();
+        });
     }
 
-    function startLobbyCountdown() {
-        lobbyTimer = 60;
+    function startDynamicCountdown() {
+        isCountingDown = true;
+        lobbyTimer = 10;
+        document.getElementById('timer-container').style.display = 'block';
         clearInterval(lobbyInterval);
+
         lobbyInterval = setInterval(() => {
             lobbyTimer--;
             document.getElementById('lobby-timer-count').innerText = lobbyTimer;
-            registerActiveServer(); // Keep server alive in browser list
             
             broadcastToClients({
                 type: 'LOBBY_UPDATE',
                 timer: lobbyTimer,
                 connectedCount: connections.length + 1,
-                teamSize: targetTeamSize
+                teamSize: targetTeamSize,
+                serverName: serverName
             });
             updateLobbyUI();
 
@@ -618,6 +629,15 @@
 
     function updateLobbyUI() {
         renderLobbyList(connections.length + 1, targetTeamSize);
+        if (mode === 'HOST') {
+            broadcastToClients({
+                type: 'LOBBY_UPDATE',
+                timer: isCountingDown ? lobbyTimer : 10,
+                connectedCount: connections.length + 1,
+                teamSize: targetTeamSize,
+                serverName: serverName
+            });
+        }
     }
 
     function renderLobbyList(connected, teamSize) {
@@ -653,6 +673,14 @@
 
     function cancelLobby() {
         clearInterval(lobbyInterval);
+        isCountingDown = false;
+        if (mode === 'HOST') {
+            try {
+                let servers = JSON.parse(localStorage.getItem('mamo_servers') || '[]');
+                servers = servers.filter(s => s.id !== myPeerId);
+                localStorage.setItem('mamo_servers', JSON.stringify(servers));
+            } catch(e){}
+        }
         document.getElementById('online-modal').classList.add('hidden');
         document.getElementById('menu-modal').classList.remove('hidden');
         mode = 'AI';
@@ -662,7 +690,6 @@
         connections.forEach(c => { if (c.open) c.send(msg); });
     }
 
-    // Gameplay & Teams Setup
     function initTeams(redNum, blueNum) {
         players = [];
         for (let i = 0; i < redNum; i++) {
@@ -685,7 +712,7 @@
 
     function startAIMatch() {
         mode = 'AI';
-        targetTeamSize = parseInt(document.getElementById('team-format').value) || 3;
+        targetTeamSize = parseInt(document.getElementById('team-format') ? document.getElementById('team-format').value : 3) || 3;
         initTeams(targetTeamSize, targetTeamSize);
         document.getElementById('menu-modal').classList.add('hidden');
         resetGame();
@@ -751,7 +778,6 @@
         overlay.classList.remove('hidden');
     }
 
-    // Input Handling
     let touchInput = { dx: 0, dy: 0, kick: false, boost: false };
 
     function getLocalInput() {
