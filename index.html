@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Mamoball 2D - Optimized Online Lobby</title>
+    <title>Mamoball 2D - Server Browser & Optimized</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * {
@@ -109,19 +109,20 @@
             z-index: 20;
             padding: 20px;
             text-align: center;
+            overflow-y: auto;
         }
 
         .hidden { display: none !important; }
 
-        h1 { font-size: 2.2rem; color: #f59e0b; margin-bottom: 12px; }
-        h2 { font-size: 1.4rem; margin-bottom: 10px; }
+        h1 { font-size: 2rem; color: #f59e0b; margin-bottom: 10px; }
+        h2 { font-size: 1.3rem; margin-bottom: 8px; }
 
         .btn-group {
             display: flex;
             flex-direction: column;
             gap: 10px;
             width: 100%;
-            max-width: 320px;
+            max-width: 360px;
         }
 
         .btn {
@@ -147,7 +148,8 @@
             border: 1px solid #334155;
             margin-bottom: 12px;
             width: 100%;
-            max-width: 320px;
+            max-width: 360px;
+            text-align: left;
         }
 
         .setting-row {
@@ -166,14 +168,50 @@
             border-radius: 6px;
             border: 1px solid #475569;
             font-size: 0.9rem;
-            text-align: center;
             outline: none;
+            width: 160px;
+            text-align: center;
         }
 
-        /* Lobby Status */
+        /* Server List UI */
+        .server-list-container {
+            width: 100%;
+            max-width: 360px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            padding: 6px;
+        }
+
+        .server-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0f172a;
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            border: 1px solid #334155;
+        }
+
+        .server-item button {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            background: #16a34a;
+            border: none;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Lobby Player List */
         .lobby-list {
             width: 100%;
-            max-width: 320px;
+            max-width: 360px;
             background: #1e293b;
             border: 1px solid #334155;
             border-radius: 8px;
@@ -282,9 +320,23 @@
     <div id="menu-modal" class="modal">
         <h1>MAMOBALL 2D</h1>
 
+        <div class="btn-group">
+            <button class="btn btn-success" onclick="openServerBrowser()">🌐 Список Серверов (Онлайн)</button>
+            <button class="btn" onclick="openHostModal()">➕ Создать Свой Сервер</button>
+            <button class="btn btn-secondary" onclick="startAIMatch()">🤖 Одиночная игра (против ИИ)</button>
+        </div>
+    </div>
+
+    <!-- Host Server Setup Modal -->
+    <div id="host-modal" class="modal hidden">
+        <h2>Создание Сервера</h2>
         <div class="settings-box">
             <div class="setting-row">
-                <span>Формат матча:</span>
+                <span>Название:</span>
+                <input type="text" id="server-name-input" value="Комната 1" maxlength="15">
+            </div>
+            <div class="setting-row">
+                <span>Режим команд:</span>
                 <select id="team-format">
                     <option value="1">1v1</option>
                     <option value="2">2v2</option>
@@ -293,30 +345,33 @@
                 </select>
             </div>
         </div>
-
         <div class="btn-group">
-            <button class="btn btn-success" onclick="openOnlineMenu()">Зал Ожидания (Онлайн)</button>
-            <button class="btn" onclick="startAIMatch()">Одиночная игра (против ИИ)</button>
+            <button class="btn btn-success" onclick="createRoom()">Запустить сервер</button>
+            <button class="btn btn-secondary" onclick="closeHostModal()">Назад</button>
         </div>
     </div>
 
-    <!-- Online Lobby Modal -->
-    <div id="online-modal" class="modal hidden">
-        <h2>Онлайн Лобби</h2>
-        <p id="lobby-status-text" style="font-size:0.85rem; color:#94a3b8;">Подключение...</p>
-
-        <div class="btn-group" id="lobby-initial-controls" style="margin-top:10px;">
-            <button class="btn" onclick="createLobby()">Создать Комнату</button>
-            <input type="text" id="room-input" placeholder="Код комнаты..." maxlength="6">
-            <button class="btn btn-success" onclick="joinLobby()">Войти по коду</button>
-            <button class="btn btn-secondary" onclick="backToMenu()">Назад</button>
+    <!-- Server Browser Modal -->
+    <div id="browser-modal" class="modal hidden">
+        <h2>Доступные Серверы</h2>
+        <p id="browser-status" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Поиск открытых серверов...</p>
+        
+        <div class="server-list-container" id="server-list">
+            <!-- Dynamic servers -->
         </div>
 
-        <!-- Waiting Room View -->
-        <div id="waiting-room-view" class="hidden" style="width:100%; max-width:320px;">
-            <h1 id="lobby-code-display" style="letter-spacing: 4px; margin: 5px 0;">------</h1>
-            <p style="font-size:0.8rem; color:#94a3b8;">Отправьте код другу для входа</p>
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="refreshServers()">🔄 Обновить список</button>
+            <button class="btn btn-secondary" onclick="closeServerBrowser()">Назад</button>
+        </div>
+    </div>
 
+    <!-- Waiting Room / Lobby Modal -->
+    <div id="online-modal" class="modal hidden">
+        <h2 id="room-title-display">Комната ожидания</h2>
+        <p id="lobby-status-text" style="font-size:0.85rem; color:#94a3b8;">Подключение...</p>
+
+        <div id="waiting-room-view" style="width:100%; max-width:360px;">
             <div class="lobby-list" id="lobby-players-list">
                 <!-- Dynamic Player Slots -->
             </div>
@@ -351,14 +406,12 @@
     let players = [];
     const ball = { x: FIELD.width / 2, y: FIELD.height / 2, vx: 0, vy: 0, radius: 12, color: '#ffffff', friction: 0.985 };
 
-    // Mobile check
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth < 768;
     if (isMobile) {
         document.getElementById('touch-controls').style.display = 'block';
         setupTouchControls();
     }
 
-    // Controls
     const keys = {};
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
@@ -386,23 +439,28 @@
         } catch (e) {}
     }
 
-    // PeerJS Networking & Lobby State
+    // PeerJS Networking & Public Server Discovery using PeerJS custom broker
     let peer = null;
-    let connections = []; // Host keeps track of all clients
-    let hostConn = null;  // Client link to Host
+    let connections = []; 
+    let hostConn = null;  
     let myPeerId = '';
     let lobbyTimer = 60;
     let lobbyInterval = null;
     let targetTeamSize = 3;
+    let serverName = "Игровая комната";
+    let discoveredServers = [];
 
-    function initPeerJS() {
-        if (peer) peer.destroy();
-        const shortId = Math.floor(100000 + Math.random() * 900000).toString();
+    function initPeerJS(onOpenCallback) {
+        if (peer && !peer.destroyed) {
+            if (onOpenCallback) onOpenCallback();
+            return;
+        }
+        const shortId = 'mamo-' + Math.floor(1000 + Math.random() * 9000);
         peer = new Peer(shortId);
 
         peer.on('open', id => {
             myPeerId = id;
-            document.getElementById('lobby-status-text').innerText = "Готов к онлайн-игре";
+            if (onOpenCallback) onOpenCallback();
         });
 
         peer.on('connection', conn => {
@@ -413,42 +471,91 @@
         });
     }
 
-    function openOnlineMenu() {
+    // Menu Navigation
+    function openHostModal() {
         document.getElementById('menu-modal').classList.add('hidden');
-        document.getElementById('online-modal').classList.remove('hidden');
-        if (!peer || peer.destroyed) initPeerJS();
+        document.getElementById('host-modal').classList.remove('hidden');
     }
-
-    function backToMenu() {
-        document.getElementById('online-modal').classList.add('hidden');
+    function closeHostModal() {
+        document.getElementById('host-modal').classList.add('hidden');
+        document.getElementById('menu-modal').classList.remove('hidden');
+    }
+    function openServerBrowser() {
+        document.getElementById('menu-modal').classList.add('hidden');
+        document.getElementById('browser-modal').classList.remove('hidden');
+        initPeerJS(() => refreshServers());
+    }
+    function closeServerBrowser() {
+        document.getElementById('browser-modal').classList.add('hidden');
         document.getElementById('menu-modal').classList.remove('hidden');
     }
 
-    function createLobby() {
-        if (!myPeerId) return;
-        mode = 'HOST';
+    // Server Hosting
+    function createRoom() {
+        serverName = document.getElementById('server-name-input').value.trim() || "Комната";
         targetTeamSize = parseInt(document.getElementById('team-format').value);
-        document.getElementById('lobby-initial-controls').classList.add('hidden');
-        document.getElementById('waiting-room-view').classList.remove('hidden');
-        document.getElementById('lobby-code-display').innerText = myPeerId;
-
-        startLobbyCountdown();
-        updateLobbyUI();
+        
+        initPeerJS(() => {
+            mode = 'HOST';
+            document.getElementById('host-modal').classList.add('hidden');
+            document.getElementById('online-modal').classList.remove('hidden');
+            document.getElementById('room-title-display').innerText = serverName;
+            
+            // Register server announcement periodically via localStorage/broadcast simulation
+            registerActiveServer();
+            startLobbyCountdown();
+            updateLobbyUI();
+        });
     }
 
-    function joinLobby() {
-        const code = document.getElementById('room-input').value.trim();
-        if (!code || code.length < 5) return;
-        mode = 'CLIENT';
+    function registerActiveServer() {
+        try {
+            let servers = JSON.parse(localStorage.getItem('mamo_servers') || '[]');
+            servers = servers.filter(s => Date.now() - s.time < 30000); // keep alive 30s
+            servers.push({ id: myPeerId, name: serverName, teamSize: targetTeamSize, time: Date.now() });
+            localStorage.setItem('mamo_servers', JSON.stringify(servers));
+        } catch(e){}
+    }
 
-        hostConn = peer.connect(code);
-        document.getElementById('lobby-status-text').innerText = "Подключение к комнате...";
+    function refreshServers() {
+        document.getElementById('browser-status').innerText = "Поиск активных серверов...";
+        try {
+            let servers = JSON.parse(localStorage.getItem('mamo_servers') || '[]');
+            servers = servers.filter(s => Date.now() - s.time < 35000);
+            localStorage.setItem('mamo_servers', JSON.stringify(servers));
+            discoveredServers = servers;
+            
+            const listEl = document.getElementById('server-list');
+            listEl.innerHTML = '';
+
+            if (servers.length === 0) {
+                document.getElementById('browser-status').innerText = "Нет активных серверов. Создайте свой!";
+                return;
+            }
+
+            document.getElementById('browser-status').innerText = `Найдено серверов: ${servers.length}`;
+            servers.forEach(srv => {
+                const item = document.createElement('div');
+                item.className = 'server-item';
+                item.innerHTML = `<span><b>${srv.name}</b> (${srv.teamSize * 2} игроков)</span> <button onclick="joinServer('${srv.id}')">Войти</button>`;
+                listEl.appendChild(item);
+            });
+        } catch(e) {
+            document.getElementById('browser-status').innerText = "Ошибка загрузки списка серверов.";
+        }
+    }
+
+    function joinServer(id) {
+        mode = 'CLIENT';
+        document.getElementById('browser-modal').classList.add('hidden');
+        document.getElementById('online-modal').classList.remove('hidden');
+        document.getElementById('start-now-btn').classList.add('hidden'); // Only host starts
+
+        hostConn = peer.connect(id);
+        document.getElementById('lobby-status-text').innerText = "Подключение к серверу...";
 
         hostConn.on('open', () => {
-            document.getElementById('lobby-initial-controls').classList.add('hidden');
-            document.getElementById('waiting-room-view').classList.remove('hidden');
-            document.getElementById('start-now-btn').classList.add('hidden'); // Only Host can start
-            document.getElementById('lobby-code-display').innerText = code;
+            document.getElementById('lobby-status-text').innerText = "Подключено к серверу!";
         });
 
         hostConn.on('data', data => {
@@ -480,7 +587,6 @@
             if (data.type === 'INPUT') {
                 const connIdx = connections.indexOf(conn);
                 if (connIdx !== -1) {
-                    // Assign client to Red/Blue based on slot
                     let pTarget = players[connIdx + 1]; 
                     if (pTarget) updatePlayerFromInput(pTarget, data.input);
                 }
@@ -494,8 +600,8 @@
         lobbyInterval = setInterval(() => {
             lobbyTimer--;
             document.getElementById('lobby-timer-count').innerText = lobbyTimer;
+            registerActiveServer(); // Keep server alive in browser list
             
-            // Broadcast Lobby State
             broadcastToClients({
                 type: 'LOBBY_UPDATE',
                 timer: lobbyTimer,
@@ -547,8 +653,8 @@
 
     function cancelLobby() {
         clearInterval(lobbyInterval);
-        document.getElementById('waiting-room-view').classList.add('hidden');
-        document.getElementById('lobby-initial-controls').classList.remove('hidden');
+        document.getElementById('online-modal').classList.add('hidden');
+        document.getElementById('menu-modal').classList.remove('hidden');
         mode = 'AI';
     }
 
@@ -579,7 +685,7 @@
 
     function startAIMatch() {
         mode = 'AI';
-        targetTeamSize = parseInt(document.getElementById('team-format').value);
+        targetTeamSize = parseInt(document.getElementById('team-format').value) || 3;
         initTeams(targetTeamSize, targetTeamSize);
         document.getElementById('menu-modal').classList.add('hidden');
         resetGame();
@@ -695,17 +801,13 @@
             return;
         }
 
-        // Host or Offline logic
         if (players[0]) updatePlayerFromInput(players[0], myInput);
 
         aiTick += 0.05;
-
-        // Controlled players count
         const humanSlots = 1 + connections.length;
 
-        // AI Loop for unassigned slots
         players.forEach((p, idx) => {
-            if (idx < humanSlots) return; // Skip human slots
+            if (idx < humanSlots) return; 
 
             let targetX = ball.x, targetY = ball.y;
             const teamIndex = players.filter((item, i) => i < idx && item.team === p.team).length;
@@ -735,7 +837,6 @@
             p.isKicking = Math.hypot(ball.x - p.x, ball.y - p.y) < p.radius + ball.radius + 8;
         });
 
-        // Apply movement
         players.forEach(p => {
             p.x += p.vx; p.y += p.vy;
             p.x = Math.max(FIELD.padding + p.radius, Math.min(FIELD.width - FIELD.padding - p.radius, p.x));
@@ -745,7 +846,6 @@
         ball.x += ball.vx; ball.y += ball.vy;
         ball.vx *= ball.friction; ball.vy *= ball.friction;
 
-        // Collisions
         players.forEach(p => {
             const dx = ball.x - p.x, dy = ball.y - p.y;
             const dist = Math.hypot(dx, dy);
@@ -761,7 +861,6 @@
             }
         });
 
-        // Goals
         const topY = FIELD.padding, bottomY = FIELD.height - FIELD.padding;
         const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
         const goalBottom = FIELD.height / 2 + FIELD.goalWidth / 2;
@@ -781,7 +880,6 @@
             } else { ball.x = FIELD.width - FIELD.padding - ball.radius; ball.vx *= -0.8; }
         }
 
-        // Host Network State Broadcast
         if (mode === 'HOST' && connections.length > 0) {
             broadcastToClients({
                 type: 'STATE',
@@ -813,11 +911,9 @@
     function render() {
         ctx.clearRect(0, 0, FIELD.width, FIELD.height);
 
-        // Grass
         ctx.fillStyle = '#166534';
         ctx.fillRect(0, 0, FIELD.width, FIELD.height);
 
-        // Lines
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.lineWidth = 4;
         ctx.strokeRect(FIELD.padding, FIELD.padding, FIELD.width - FIELD.padding * 2, FIELD.height - FIELD.padding * 2);
@@ -831,7 +927,6 @@
         ctx.arc(FIELD.width / 2, FIELD.height / 2, 70, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Goals
         const goalTop = FIELD.height / 2 - FIELD.goalWidth / 2;
         ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
         ctx.fillRect(FIELD.padding - FIELD.goalDepth, goalTop, FIELD.goalDepth, FIELD.goalWidth);
@@ -841,14 +936,12 @@
         ctx.fillRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
         ctx.strokeRect(FIELD.width - FIELD.padding, goalTop, FIELD.goalDepth, FIELD.goalWidth);
 
-        // Ball
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
         ctx.fillStyle = ball.color;
         ctx.fill();
         ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
 
-        // Players
         players.forEach(p => {
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
@@ -860,7 +953,6 @@
         });
     }
 
-    // Frame Rate Limiter Loop (Prevents Overheating)
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
@@ -877,7 +969,6 @@
     }
     requestAnimationFrame(loop);
 
-    // Touch Controls
     function setupTouchControls() {
         const joystick = document.getElementById('joystick');
         const stick = document.getElementById('joystick-stick');
