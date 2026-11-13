@@ -3,8 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Mamoball 2D - Fixed Server Browser & P2P</title>
+    <title>Mamoball 2D - Firebase Online</title>
+    <!-- PeerJS для P2P матчей -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Firebase SDK (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+        import { getDatabase, ref, set, get, remove, onValue, push, child } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-database.js";
+
+        // Конфигурация твоего Firebase проекта
+        const firebaseConfig = {
+            apiKey: "AIzaSyA17f6BWGK8739ollun8uq9gMj000HbMyE",
+            authDomain: "mamoball-a0fe2.firebaseapp.com",
+            databaseURL: "https://mamoball-a0fe2-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "mamoball-a0fe2",
+            storageBucket: "mamoball-a0fe2.appspot.com",
+            messagingSenderId: "824486824905",
+            appId: "1:824486824905:web:181635ac14e24961a83618",
+            measurementId: "G-WSZK9JH6XC"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Делаем функции доступными глобально в игре
+        window.FB = { db, ref, set, get, remove, onValue, push, child };
+    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -365,12 +389,12 @@
     <!-- Server Browser Modal -->
     <div id="browser-modal" class="modal hidden">
         <h2>Доступные Серверы</h2>
-        <p id="browser-status" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Поиск открытых серверов...</p>
+        <p id="browser-status" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Поиск серверов в Firebase...</p>
         
         <div class="server-list-container" id="server-list"></div>
 
         <div class="btn-group">
-            <button class="btn btn-secondary" onclick="refreshServers()">🔄 Обновить список</button>
+            <button class="btn btn-secondary" onclick="refreshServersFirebase()">🔄 Обновить список</button>
             <button class="btn btn-secondary" onclick="closeServerBrowser()">Назад</button>
         </div>
     </div>
@@ -460,7 +484,6 @@
             if (onOpenCallback) onOpenCallback();
             return;
         }
-        // Используем публичный бесплатный сервант PeerJS с уникальным префиксом
         peer = new Peer();
 
         peer.on('open', id => {
@@ -498,12 +521,79 @@
     function openServerBrowser() {
         document.getElementById('menu-modal').classList.add('hidden');
         document.getElementById('browser-modal').classList.remove('hidden');
-        initPeerJS(() => refreshServers());
+        initPeerJS(() => refreshServersFirebase());
     }
     function closeServerBrowser() {
         document.getElementById('browser-modal').classList.add('hidden');
         document.getElementById('menu-modal').classList.remove('hidden');
     }
+
+    // --- ФУНКЦИИ FIREBASE ДЛЯ СЕРВЕРОВ ---
+    async function registerServerFirebase() {
+        if (!window.FB || !myPeerId) return;
+        try {
+            const serverRef = window.FB.ref(window.FB.db, 'servers/' + myPeerId);
+            await window.FB.set(serverRef, {
+                id: myPeerId,
+                name: serverName,
+                teamSize: targetTeamSize,
+                time: Date.now()
+            });
+        } catch (e) {
+            console.error("Firebase register error:", e);
+        }
+    }
+
+    async function removeServerFirebase() {
+        if (!window.FB || !myPeerId) return;
+        try {
+            const serverRef = window.FB.ref(window.FB.db, 'servers/' + myPeerId);
+            await window.FB.remove(serverRef);
+        } catch (e) {}
+    }
+
+    async function refreshServersFirebase() {
+        document.getElementById('browser-status').innerText = "Загрузка серверов из Firebase...";
+        const listEl = document.getElementById('server-list');
+        listEl.innerHTML = '';
+
+        if (!window.FB) {
+            document.getElementById('browser-status').innerText = "Firebase еще загружается...";
+            return;
+        }
+
+        try {
+            const dbRef = window.FB.ref(window.FB.db, 'servers');
+            const snapshot = await window.FB.get(dbRef);
+            
+            if (!snapshot.exists()) {
+                document.getElementById('browser-status').innerText = "Нет активных серверов. Создайте свой!";
+                return;
+            }
+
+            let count = 0;
+            snapshot.forEach((childSnapshot) => {
+                const srv = childSnapshot.val();
+                // Удаляем серверы, которые не обновлялись больше 30 секунд (мертвые хосты)
+                if (Date.now() - srv.time < 30000) {
+                    count++;
+                    const item = document.createElement('div');
+                    item.className = 'server-item';
+                    item.innerHTML = `<span><b>${srv.name}</b> (${srv.teamSize * 2} мест)</span> <button onclick="joinServer('${srv.id}', '${srv.name}', ${srv.teamSize})">Войти</button>`;
+                    listEl.appendChild(item);
+                }
+            });
+
+            document.getElementById('browser-status').innerText = count > 0 ? `Найдено серверов: ${count}` : "Нет активных серверов.";
+        } catch (e) {
+            document.getElementById('browser-status').innerText = "Ошибка подключения к Firebase.";
+        }
+    }
+
+    // Пинг хоста в Firebase каждые 5 секунд для поддержания статуса «онлайн»
+    setInterval(() => {
+        if (mode === 'HOST') registerServerFirebase();
+    }, 5000);
 
     function createRoom() {
         serverName = document.getElementById('server-name-input').value.trim() || "Комната";
@@ -519,64 +609,20 @@
             document.getElementById('timer-container').style.display = 'none';
             document.getElementById('start-now-btn').classList.remove('hidden');
             
-            registerActiveServer();
+            registerServerFirebase();
             updateLobbyUI();
         });
     }
 
-    // Использование публичного бэкенда (JSONbin / публичный сервис обмена списками) или надежного обмена через Firebase / публичный Worker
-    // Для стабильности используем бесплатный API JSONbin для обмена списком активных комнат по всему интернету
-    const BIN_API_URL = "https://api.jsonbin.io/v3/b/6632f1a7ad19ca34f861e680"; // Публичный пул хранилища серверов
-
-    async function registerActiveServer() {
-        if (!myPeerId) return;
-        try {
-            let res = await fetch("https://jsonip.com"); // просто пинг для проверки сети
-            // Сохраняем сервер в публичный глобальный список через общедоступный Pastebin/JSON Bin аналог или локальный хран с кросс-доменным эмулятором
-            let servers = JSON.parse(localStorage.getItem('mamo_global_servers') || '[]');
-            servers = servers.filter(s => s.id !== myPeerId && Date.now() - s.time < 20000);
-            servers.push({ id: myPeerId, name: serverName, teamSize: targetTeamSize, time: Date.now() });
-            localStorage.setItem('mamo_global_servers', JSON.stringify(servers));
-        } catch(e){}
-    }
-
-    setInterval(() => {
-        if (mode === 'HOST') registerActiveServer();
-    }, 4000);
-
-    function refreshServers() {
-        document.getElementById('browser-status').innerText = "Поиск активных серверов в интернете...";
-        try {
-            let servers = JSON.parse(localStorage.getItem('mamo_global_servers') || '[]');
-            servers = servers.filter(s => Date.now() - s.time < 25000);
-            localStorage.setItem('mamo_global_servers', JSON.stringify(servers));
-            
-            const listEl = document.getElementById('server-list');
-            listEl.innerHTML = '';
-
-            if (servers.length === 0) {
-                document.getElementById('browser-status').innerText = "Нет активных серверов. Создайте свой!";
-                return;
-            }
-
-            document.getElementById('browser-status').innerText = `Найдено серверов: ${servers.length}`;
-            servers.forEach(srv => {
-                const item = document.createElement('div');
-                item.className = 'server-item';
-                item.innerHTML = `<span><b>${srv.name}</b> (${srv.teamSize * 2} мест)</span> <button onclick="joinServer('${srv.id}')">Войти</button>`;
-                listEl.appendChild(item);
-            });
-        } catch(e) {
-            document.getElementById('browser-status').innerText = "Ошибка загрузки списка серверов.";
-        }
-    }
-
-    function joinServer(id) {
+    function joinServer(id, sName, tSize) {
         mode = 'CLIENT';
+        targetTeamSize = tSize;
+        serverName = sName;
         document.getElementById('browser-modal').classList.add('hidden');
         document.getElementById('online-modal').classList.remove('hidden');
         document.getElementById('start-now-btn').classList.add('hidden'); 
         document.getElementById('timer-container').style.display = 'block';
+        document.getElementById('room-title-display').innerText = serverName;
         document.getElementById('lobby-status-text').innerText = "Подключение к серверу...";
 
         initPeerJS(() => {
@@ -586,8 +632,8 @@
                 document.getElementById('lobby-status-text').innerText = "Успешно подключено к серверу!";
             });
 
-            hostConn.on('error', (err) => {
-                document.getElementById('lobby-status-text').innerText = "Ошибка подключения!";
+            hostConn.on('error', () => {
+                document.getElementById('lobby-status-text').innerText = "Не удалось подключиться к серверу!";
             });
 
             hostConn.on('data', data => {
@@ -694,6 +740,7 @@
     function forceStartMatch() {
         if (mode !== 'HOST') return;
         clearInterval(lobbyInterval);
+        removeServerFirebase(); // Удаляем из списка активных серверов, чтобы новые игроки не заходили во время матча
 
         broadcastToClients({ type: 'START_MATCH', teamSize: targetTeamSize });
         document.getElementById('online-modal').classList.add('hidden');
@@ -719,11 +766,7 @@
         clearInterval(lobbyInterval);
         isCountingDown = false;
         if (mode === 'HOST') {
-            try {
-                let servers = JSON.parse(localStorage.getItem('mamo_global_servers') || '[]');
-                servers = servers.filter(s => s.id !== myPeerId);
-                localStorage.setItem('mamo_global_servers', JSON.stringify(servers));
-            } catch(e){}
+            removeServerFirebase();
             broadcastToClients({ type: 'RETURN_TO_LOBBY', serverName, teamSize: targetTeamSize });
         }
         document.getElementById('online-modal').classList.add('hidden');
@@ -822,6 +865,7 @@
                 document.getElementById('lobby-status-text').innerText = "Матч окончен. Снова в лобби!";
                 document.getElementById('timer-container').style.display = 'block';
                 document.getElementById('start-now-btn').classList.remove('hidden');
+                registerServerFirebase(); // Снова возвращаем в список серверов
                 updateLobbyUI();
             }
         }, 3000);
